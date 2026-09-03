@@ -1,57 +1,20 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
+// src/App.tsx
 import "./App.css";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Login } from "./pages/access/Login";
+import { Dashboard } from "./pages/access/Dashboard";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
-
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
-
+export default function App() {
   return (
-    <main className="container" >
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">
-      <button className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg p-10 shadow font-medium">
-        ¡Tailwind funcionando!
-      </button>
-    </div>
-    
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    <BrowserRouter>
+      <Routes>
+        {/* Redirige la raíz al login */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        
+        {/* Rutas de la app */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
-
-export default App;
