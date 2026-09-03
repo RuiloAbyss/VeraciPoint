@@ -1,5 +1,6 @@
 // src/components/ActionCard.tsx
 import type { ReactNode } from "react";
+import { motion } from "framer-motion";
 
 export interface ActionCardProps {
   id: string;
@@ -8,37 +9,40 @@ export interface ActionCardProps {
   iconBg: string;
   icon: ReactNode;
   onClick?: () => void;
+  isSelected?: boolean;
 }
 
 export function ActionCard({
+  id,
   title,
   description,
   iconBg,
   icon,
   onClick,
+  isSelected,
 }: ActionCardProps) {
   return (
-    <button
+    <motion.button
       type="button"
       onClick={onClick}
-      className="group flex flex-col items-center justify-between rounded-3xl border border-white/60 bg-surface-1 p-6 shadow-sm hover:shadow-xl hover:border-primary/50 transition-all duration-300 text-center cursor-pointer hover:-translate-y-1.5 w-full"
+      className={`group flex w-full flex-col items-center justify-between rounded-2xl border border-white/50 bg-surface-1/80 p-4 shadow-md backdrop-blur-md transition-colors duration-200 hover:border-primary hover:bg-surface-1 hover:shadow-xl cursor-pointer ${
+        isSelected ? "pointer-events-none z-50 ring-2 ring-primary" : ""
+      }`}
     >
-      {/* Contenedor superior para el ícono o imagen */}
       <div
-        className={`mb-4 flex h-20 w-20 items-center justify-center rounded-2xl ${iconBg} text-3xl shadow-inner group-hover:scale-110 transition-transform duration-300`}
+        className={`mb-3 flex h-16 w-16 items-center justify-center rounded-2xl ${iconBg} text-3xl shadow-inner transition-transform duration-300 group-hover:scale-110`}
       >
         {icon}
       </div>
 
-      {/* Textos informativos */}
-      <div className="flex flex-col flex-grow justify-center">
-        <h3 className="text-base font-bold text-on-bg group-hover:text-primary transition-colors">
+      <div className="flex flex-grow flex-col justify-center text-center">
+        <h3 className="text-sm font-bold text-on-bg transition-colors group-hover:text-primary lg:text-base">
           {title}
         </h3>
-        <p className="mt-1.5 text-xs text-on-bg/60 leading-relaxed">
+        <p className="mt-1 text-xs leading-relaxed text-on-bg/70">
           {description}
         </p>
       </div>
-    </button>
+    </motion.button>
   );
 }
