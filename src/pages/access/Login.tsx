@@ -1,12 +1,16 @@
-// src/pages/access/Login.tsx
-import { useState, useEffect, type SubmitEvent } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { motion } from "framer-motion";
-
 import bgImage from "../../assets/wallpaper-login.jpg"; 
 
 type DbStatus = "verifying" | "active" | "inactive";
+
+interface AuthResponse {
+  employeeId: number;
+  name: string;
+  isAdmin: boolean;
+}
 
 export function Login() {
   const [username, setUsername] = useState("");
@@ -28,29 +32,33 @@ export function Login() {
     verifyConnection();
   }, []);
 
-  const handleSubmit = async (e: SubmitEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  // Sintaxis moderna de TypeScript para evitar la recarga de página
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault(); // Evita la pantalla blanca
     if (dbStatus !== "active") return;
     
+    sessionStorage.clear();
     setHasError(false);
     setIsLoading(true);
 
     try {
-      const name = await invoke<string>("authenticate", { 
+      const userSession = await invoke<AuthResponse>("authenticate", { 
         username, 
         pin: password 
       });
-      console.log("Bienvenido:", name);
+      
+      console.log("Sesión validada por SQL Server:", userSession);
+      
+      sessionStorage.setItem("userSession", JSON.stringify(userSession));
       navigate("/dashboard");
     } catch (err) {
-      // Activamos el estado de error para disparar la animación y bloquear el botón
+      console.error("Error en credenciales:", err);
       setHasError(true);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Limpia el estado de error en cuanto el usuario empiece a corregir los campos
   const handleInputChange = (setter: React.Dispatch<React.SetStateAction<string>>) => 
     (e: React.ChangeEvent<HTMLInputElement>) => {
       setter(e.target.value);
@@ -63,7 +71,6 @@ export function Login() {
     inactive: { color: "bg-red-500", text: "Sistema Inactivo" }
   };
 
-  // El formulario se bloquea si no hay conexión, si está cargando, o si hay un error de credenciales activo
   const isFormDisabled = dbStatus !== "active" || isLoading || hasError;
 
   return (
@@ -120,7 +127,6 @@ export function Login() {
             />
           </div>
 
-          {/* Botón animado con framer-motion */}
           <motion.button
             type="submit"
             disabled={isFormDisabled}

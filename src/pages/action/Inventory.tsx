@@ -1,4 +1,5 @@
-// src/pages/access/Inventory.tsx
+// src/pages/action/Inventory.tsx (fragmento principal)
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ProductCard } from "../../components/ProductCard";
@@ -6,38 +7,49 @@ import { BulkProductCard } from "../../components/BulkProductCard";
 
 export function Inventory() {
   const navigate = useNavigate();
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  const regularProducts = Array.from({ length: 6 }).map((_, i) => ({
-    id: i, name: `Coca-Cola 600ml ${i + 1}`, category: "Bebidas", code: "75012345678", price: 18.00, stock: 45,
-  }));
+  useEffect(() => {
+    const raw = sessionStorage.getItem("userSession");
+    if (raw) {
+      const session = JSON.parse(raw);
+      setIsAdmin(session.is_admin);
+    }
+  }, []);
+
+  const handleRestock = (name: string) => alert(`Abasteciendo: ${name}`);
+  const handleEdit = (name: string) => alert(`Editando producto / reduciendo merma: ${name}`);
+  const handleDeactivate = (name: string) => alert(`Dando de baja: ${name}`);
+
+  const regularProducts = [
+    { id: 1, name: "Coca-Cola 600ml", category: "Bebidas", code: "75012345678", price: 18.00, stock: 45 },
+    { id: 2, name: "Galletas Marías 170g", category: "Abarrotes", code: "75010001112", price: 16.50, stock: 12 },
+  ];
 
   const bulkProducts = [
-    { name: 'Jitomate Saladette', price: 24.50 }, { name: 'Cebolla Blanca', price: 18.00 },
-    { name: 'Aguacate Hass', price: 85.00 }, { name: 'Plátano Macho', price: 22.50 },
+    { name: 'Jitomate Saladette', price: 24.50 },
+    { name: 'Cebolla Blanca', price: 18.00 },
   ];
 
   return (
     <motion.div
       className="absolute inset-0 flex flex-col p-3 sm:p-4 lg:p-5 gap-5 text-on-bg z-20"
-      initial={{ y: "100%" }} // Viene de abajo al entrar
-      animate={{ y: "0%" }}   // Posición central
-      exit={{ y: "100%" }}    // Se va hacia abajo al volver
-      transition={{ 
-        duration: 0.28, 
-        ease: [0.16, 1, 0.3, 1] // Curva easeOutExpo 
-      }}
+      initial={{ y: "100%" }}
+      animate={{ y: "0%" }}
+      exit={{ y: "100%" }}
+      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
     >
       <header className="flex items-center justify-between rounded-2xl border border-white/50 bg-surface-2/85 px-5 py-3 shadow-sm backdrop-blur-md shrink-0">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => navigate("/dashboard")} // Navegación instantánea
-            className="font-extrabold text-primary hover:text-primary/80 transition-colors cursor-pointer text-lg px-2"
+            onClick={() => navigate("/dashboard")}
+            className="font-extrabold text-primary hover:text-secondary transition-colors cursor-pointer text-lg px-2"
           >
             Volver
           </button>
           <div className="h-10 w-2.5 rounded-full bg-primary" />
           <div>
-            <span className="text-xs font-bold tracking-wider text-primary uppercase">
+            <span className="text-xs font-bold tracking-wider text-secondary uppercase">
               Abarrotes Janny • Módulo
             </span>
             <h1 className="text-xl font-extrabold text-on-bg lg:text-2xl leading-none mt-0.5">
@@ -45,8 +57,19 @@ export function Inventory() {
             </h1>
           </div>
         </div>
+
+        {/* Solo el Administrador puede registrar productos nuevos */}
+        {isAdmin && (
+          <button
+            onClick={() => alert("Abrir formulario de nuevo producto")}
+            className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-on-color shadow-sm hover:bg-secondary hover:text-on-bg transition-colors cursor-pointer"
+          >
+            + Nuevo Producto
+          </button>
+        )}
       </header>
 
+      {/* Barra de Búsqueda y Filtros */}
       <div className="flex flex-col lg:flex-row flex-wrap items-center gap-3 rounded-2xl border border-white/50 bg-surface-2/85 px-5 py-3 shadow-sm backdrop-blur-md shrink-0">
         <div className="w-full lg:flex-1 min-w-[250px]">
           <input
@@ -57,29 +80,44 @@ export function Inventory() {
         </div>
         
         <div className="flex flex-wrap gap-2 w-full lg:w-auto">
-          <select className="flex-1 lg:flex-none rounded-xl bg-surface-1 px-3 py-2.5 text-sm text-on-bg outline-none focus:ring-2 focus:ring-secondary border border-surface-3/50">
-            <option>Categorías / Marcas</option>
+          <select className="flex-1 lg:flex-none rounded-xl bg-surface-1 px-3 py-2.5 text-sm text-on-bg outline-none focus:ring-2 focus:ring-secondary border border-surface-3/50 transition-shadow">
+            <option>Todas las Categorías</option>
+            <option>Lácteos</option>
+            <option>Abarrotes</option>
+            <option>Limpieza</option>
           </select>
-          <select className="flex-1 lg:flex-none rounded-xl bg-surface-1 px-3 py-2.5 text-sm text-on-bg outline-none focus:ring-2 focus:ring-secondary border border-surface-3/50">
+          <select className="flex-1 lg:flex-none rounded-xl bg-surface-1 px-3 py-2.5 text-sm text-on-bg outline-none focus:ring-2 focus:ring-secondary border border-surface-3/50 transition-shadow">
             <option>Niveles de Stock</option>
+            <option>Bajo Stock</option>
+            <option>En Abundancia</option>
           </select>
-          <select className="flex-1 lg:flex-none rounded-xl bg-surface-1 px-3 py-2.5 text-sm text-on-bg outline-none focus:ring-2 focus:ring-secondary border border-surface-3/50">
+          <select className="flex-1 lg:flex-none rounded-xl bg-surface-1 px-3 py-2.5 text-sm text-on-bg outline-none focus:ring-2 focus:ring-secondary border border-surface-3/50 transition-shadow">
             <option>Ordenar: A-Z</option>
+            <option>Ordenar: Z-A</option>
+            <option>Menor Precio</option>
           </select>
         </div>
-      </div>
+      </div>  
 
+      {/* Contenedor de listas */}
       <div className="flex flex-col lg:flex-row gap-5 flex-1 min-h-0">
         <section className="flex flex-col flex-1 rounded-3xl border border-white/50 bg-surface-2/85 p-5 shadow-md overflow-hidden backdrop-blur-sm">
           <h2 className="text-lg font-bold text-on-bg mb-4 border-b border-surface-3 pb-2 flex items-center justify-between">
             Productos Registrados
-            <span className="text-sm font-semibold text-primary bg-secondary/30 px-3 py-1 rounded-full">
+            <span className="text-sm font-semibold text-secondary bg-secondary/10 px-3 py-1 rounded-full">
               {regularProducts.length} items
             </span>
           </h2>
           <div className="overflow-y-auto pr-2 space-y-3 flex-1 custom-scrollbar">
             {regularProducts.map((prod) => (
-              <ProductCard key={prod.id} {...prod} />
+              <ProductCard
+                key={prod.id}
+                {...prod}
+                isAdmin={isAdmin}
+                onRestock={() => handleRestock(prod.name)}
+                onEdit={() => handleEdit(prod.name)}
+                onDeactivate={() => handleDeactivate(prod.name)}
+              />
             ))}
           </div>
         </section>

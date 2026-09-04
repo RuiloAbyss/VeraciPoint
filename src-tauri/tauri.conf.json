@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "Veraci Point",
-        "width": 800,
-        "height": 600
+        "title": "VeraciPoint",
+        "width": 1024,
+        "height": 768,
+        "minWidth": 900,
+        "minHeight": 650
       }
     ],
     "security": {

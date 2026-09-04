@@ -1,14 +1,22 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
+// src-tauri/src/main.rs
 use bb8::Pool;
 use bb8_tiberius::ConnectionManager;
 use tiberius::{AuthMethod, Config};
 use tauri::{Manager, State};
 use std::env;
 use dotenvy::dotenv;
+use serde::Serialize;
 
 struct DbState {
     pool: Pool<ConnectionManager>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")] // Convierte is_admin a isAdmin automáticamente
+pub struct AuthResponse {
+    pub employee_id: i32,
+    pub name: String,
+    pub is_admin: bool,
 }
 
 #[tauri::command]
@@ -16,18 +24,17 @@ async fn authenticate(
     username: String,
     pin: String,
     state: State<'_, DbState>,
-) -> Result<String, String> {
-    let mut client = state.pool.get().await.map_err(|_| "Error interno".to_string())?;
+) -> Result<AuthResponse, String> {
+    let mut client = state.pool.get().await.map_err(|_| "Error de conexión".to_string())?;
 
     let stream = client
         .query(
-            "SELECT password, name FROM employee WHERE username = @P1 AND status = 1",
+            "SELECT password, name, admin, employeeId FROM employee WHERE username = @P1 AND status = 1",
             &[&username],
         )
         .await
-        .map_err(|_| "Error interno".to_string())?;
+        .map_err(|_| "Error de consulta".to_string())?;
 
-    // Si no hay fila o hay un error, devolvemos un mensaje genérico
     let row = match stream.into_row().await {
         Ok(Some(r)) => r,
         _ => return Err("Credenciales incorrectas".to_string()),
@@ -35,9 +42,15 @@ async fn authenticate(
 
     let db_pass: &str = row.get(0).unwrap_or("");
     let name: &str = row.get(1).unwrap_or("");
+    let is_admin: bool = row.get(2).unwrap_or(false);
+    let employee_id: i32 = row.get(3).unwrap_or(0);
 
     if db_pass == pin {
-        Ok(name.to_string())
+        Ok(AuthResponse {
+            employee_id,
+            name: name.to_string(),
+            is_admin,
+        })
     } else {
         Err("Credenciales incorrectas".to_string())
     }
@@ -51,19 +64,15 @@ async fn check_db_connection(state: State<'_, DbState>) -> Result<bool, String> 
 }
 
 fn main() {
-    // Carga las variables del archivo .env
     dotenv().ok();
 
     tauri::Builder::default()
         .setup(|app| {
-            let host = env::var("DB_HOST").expect("Falta DB_HOST en .env");
-            let port: u16 = env::var("DB_PORT")
-                .unwrap_or_else(|_| "1433".to_string())
-                .parse()
-                .expect("DB_PORT debe ser un número");
-            let user = env::var("DB_USER").expect("Falta DB_USER en .env");
-            let pass = env::var("DB_PASS").expect("Falta DB_PASS en .env");
-            let db_name = env::var("DB_NAME").expect("Falta DB_NAME en .env");
+            let host = env::var("DB_HOST").expect("Falta DB_HOST");
+            let port: u16 = env::var("DB_PORT").unwrap_or_else(|_| "1433".to_string()).parse().expect("DB_PORT numérico");
+            let user = env::var("DB_USER").expect("Falta DB_USER");
+            let pass = env::var("DB_PASS").expect("Falta DB_PASS");
+            let db_name = env::var("DB_NAME").expect("Falta DB_NAME");
 
             let mut config = Config::new();
             config.host(host);
@@ -75,11 +84,7 @@ fn main() {
             let manager = ConnectionManager::build(config).expect("Configuración inválida");
 
             let pool = tauri::async_runtime::block_on(async {
-                Pool::builder()
-                    .max_size(5)
-                    .build(manager)
-                    .await
-                    .expect("No se pudo conectar a la base de datos SQL Server")
+                Pool::builder().max_size(5).build(manager).await.expect("Error al conectar")
             });
 
             app.manage(DbState { pool });
@@ -87,5 +92,5 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![authenticate, check_db_connection])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .expect("error running tauri");
 }

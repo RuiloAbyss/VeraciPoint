@@ -1,4 +1,3 @@
-// src/App.tsx
 import "./App.css";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
@@ -7,6 +6,7 @@ import bgImage from "./assets/wallpaper-login.jpg";
 import { Login } from "./pages/access/Login";
 import { Dashboard } from "./pages/access/Dashboard";
 import { Inventory } from "./pages/action/Inventory";
+import { ErrorBoundary } from "./components/ErrorBoundary"; // <-- IMPORTACIÓN
 
 const PlaceholderView = ({ title }: { title: string }) => (
   <div className="flex h-screen w-full items-center justify-center text-2xl font-bold text-on-bg">
@@ -37,13 +37,17 @@ function AnimatedRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
-      {/* Fondo global fijo. Las pantallas se deslizarán sobre este div */}
       <div 
         className="relative min-h-screen w-full overflow-hidden bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: `url(${bgImage})` }}
       >
         <div className="absolute inset-0 bg-white/70 backdrop-blur-[3px]" />
-        <AnimatedRoutes />
+        
+        {/* ENVUELVE LAS RUTAS CON EL ESCUDO */}
+        <ErrorBoundary>
+          <AnimatedRoutes />
+        </ErrorBoundary>
+
       </div>
     </BrowserRouter>
   );
