@@ -17,9 +17,9 @@ export function Dashboard() {
     { id: "reportes", title: "Reportes", description: "Balance general", iconBg: "bg-secondary/30 text-on-bg", icon: "📊", route: "/reports" },
   ];
 
+  //Transición de entrada y salida del dashboard
   return (
     <motion.div
-      // absolute inset-0 es clave para que se encime perfectamente con Inventario durante la animación
       className="absolute inset-0 flex flex-col justify-between p-3 sm:p-4 lg:p-5 gap-5 text-on-bg z-10"
       initial={{ y: "-100%" }} // Viene de arriba al volver
       animate={{ y: "0%" }}    // Posición central

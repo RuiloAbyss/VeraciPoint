@@ -1,30 +1,78 @@
 // src/pages/access/Login.tsx
-import { useState, type SubmitEvent } from "react";
+import { useState, useEffect, type SubmitEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { invoke } from "@tauri-apps/api/core";
+import { motion } from "framer-motion";
 
-// Assets
 import bgImage from "../../assets/wallpaper-login.jpg"; 
+
+type DbStatus = "verifying" | "active" | "inactive";
 
 export function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [hasError, setHasError] = useState(false); 
+  const [isLoading, setIsLoading] = useState(false);
+  const [dbStatus, setDbStatus] = useState<DbStatus>("verifying");
   const navigate = useNavigate();
 
-  const handleSubmit = (e: SubmitEvent) => {
+  useEffect(() => {
+    const verifyConnection = async () => {
+      try {
+        await invoke("check_db_connection");
+        setDbStatus("active");
+      } catch (err) {
+        setDbStatus("inactive");
+      }
+    };
+    verifyConnection();
+  }, []);
+
+  const handleSubmit = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
-    console.log("Iniciando sesión con:", { username, password });
-    navigate("/dashboard");
+    if (dbStatus !== "active") return;
+    
+    setHasError(false);
+    setIsLoading(true);
+
+    try {
+      const name = await invoke<string>("authenticate", { 
+        username, 
+        pin: password 
+      });
+      console.log("Bienvenido:", name);
+      navigate("/dashboard");
+    } catch (err) {
+      // Activamos el estado de error para disparar la animación y bloquear el botón
+      setHasError(true);
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  // Limpia el estado de error en cuanto el usuario empiece a corregir los campos
+  const handleInputChange = (setter: React.Dispatch<React.SetStateAction<string>>) => 
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setter(e.target.value);
+      if (hasError) setHasError(false);
+  };
+
+  const ledConfig = {
+    verifying: { color: "bg-yellow-400 animate-pulse", text: "Verificando sistema..." },
+    active: { color: "bg-primary animate-pulse", text: "Sistema Activo" },
+    inactive: { color: "bg-red-500", text: "Sistema Inactivo" }
+  };
+
+  // El formulario se bloquea si no hay conexión, si está cargando, o si hay un error de credenciales activo
+  const isFormDisabled = dbStatus !== "active" || isLoading || hasError;
 
   return (
     <div
-      className="flex min-h-screen w-full items-center justify-center bg-cover bg-center bg-no-repeat p-4 lg:justify-start lg:p-0"
+      className="flex min-h-screen w-full items-center justify-center bg-cover bg-center bg-no-repeat p-4 lg:justify-start lg:p-0 relative"
       style={{ backgroundImage: `url(${bgImage})` }}
     >
-      {/* Panel de Login: Centrado y con blur en móvil; lateral al 33%, sin márgenes y casi sin blur en escritorio */}
       <div className="flex w-full max-w-sm flex-col justify-between rounded-3xl border border-white/30 bg-surface-1/75 p-6 shadow-2xl backdrop-blur-md transition-all duration-300 sm:max-w-md lg:h-screen lg:w-1/3 lg:max-w-none lg:rounded-none lg:border-y-0 lg:border-l-0 lg:border-r lg:border-white/20 lg:bg-surface-1/95 lg:p-12 lg:backdrop-blur-[2px]">
         
-        {/* Cabecera / Marca del negocio */}
         <div className="pt-2 text-center lg:pt-8">
           <h1 className="text-3xl font-extrabold tracking-tight text-on-bg sm:text-4xl lg:text-5xl">
             Abarrotes
@@ -35,55 +83,69 @@ export function Login() {
           <div className="mx-auto mt-3 h-1 w-12 rounded-full bg-primary/40 lg:w-16" />
         </div>
 
-        {/* Formulario */}
-        <form
-          onSubmit={handleSubmit}
-          className="my-auto w-full space-y-5 lg:my-0 lg:pb-12"
-        >
+        <form onSubmit={handleSubmit} className="my-auto w-full space-y-5 lg:my-0 lg:pb-12">
           <h2 className="text-xl font-bold text-center text-on-bg lg:text-2xl">
             Iniciar Sesión
           </h2>
 
           <div>
-            <label className="mb-1 block text-sm font-bold text-on-bg">
-              Usuario
-            </label>
+            <label className="mb-1 block text-sm font-bold text-on-bg">Usuario</label>
             <input
               type="text"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full rounded-xl bg-surface-3/80 px-4 py-3 text-base text-on-bg outline-none transition focus:ring-2 focus:ring-primary backdrop-blur-sm lg:bg-surface-3"
+              onChange={handleInputChange(setUsername)}
+              disabled={dbStatus !== "active" || isLoading}
+              autoComplete="off"
+              className={`w-full rounded-xl px-4 py-3 text-base text-on-bg outline-none transition backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed lg:bg-surface-3 ${
+                hasError ? "bg-red-500/10 border border-red-500 focus:ring-red-500" : "bg-surface-3/80 focus:ring-2 focus:ring-primary"
+              }`}
               placeholder="Ingresa tu usuario"
               required
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-bold text-on-bg">
-              Contraseña
-            </label>
+            <label className="mb-1 block text-sm font-bold text-on-bg">PIN de Acceso</label>
             <input
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl bg-surface-3/80 px-4 py-3 text-base text-on-bg outline-none transition focus:ring-2 focus:ring-primary backdrop-blur-sm lg:bg-surface-3"
-              placeholder="••••••••"
+              onChange={handleInputChange(setPassword)}
+              disabled={dbStatus !== "active" || isLoading}
+              autoComplete="new-password"
+              className={`w-full rounded-xl px-4 py-3 text-base text-on-bg outline-none transition backdrop-blur-sm disabled:opacity-50 disabled:cursor-not-allowed lg:bg-surface-3 tracking-widest font-mono ${
+                hasError ? "bg-red-500/10 border border-red-500 focus:ring-red-500" : "bg-surface-3/80 focus:ring-2 focus:ring-primary"
+              }`}
+              placeholder="••••"
               required
             />
           </div>
 
-          <button
+          {/* Botón animado con framer-motion */}
+          <motion.button
             type="submit"
-            className="w-full cursor-pointer rounded-xl bg-primary py-3 font-bold text-on-color shadow-md transition-colors hover:bg-secondary hover:text-on-bg"
+            disabled={isFormDisabled}
+            animate={hasError ? { x: [-10, 10, -10, 10, -5, 5, 0] } : { x: 0 }}
+            transition={{ duration: 0.4, type: "tween" }}
+            className={`w-full rounded-xl py-3 font-bold shadow-md transition-colors ${
+              hasError 
+                ? "bg-red-500 text-white cursor-not-allowed" 
+                : "bg-primary text-on-color hover:bg-secondary hover:text-on-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            }`}
           >
-            Entrar
-          </button>
+            {dbStatus === "verifying" ? "Conectando..." :
+             dbStatus === "inactive" ? "Sin Conexión" :
+             isLoading ? "Verificando..." :
+             hasError ? "Credenciales incorrectas" : 
+             "Entrar"}
+          </motion.button>
         </form>
+      </div>
 
-        {/* Pie de marca */}
-        <div className="text-center text-xs text-on-bg/40 lg:block pb-2">
-          VeraciPoint
-        </div>
+      <div className="fixed bottom-5 right-5 flex items-center gap-3 rounded-2xl border border-white/20 bg-surface-1/80 px-4 py-2.5 shadow-xl backdrop-blur-md select-none z-50">
+        <div className={`h-3 w-3 rounded-full ${ledConfig[dbStatus].color}`} />
+        <span className="text-xs font-bold text-on-bg/90 tracking-wide">
+          {ledConfig[dbStatus].text}
+        </span>
       </div>
     </div>
   );
