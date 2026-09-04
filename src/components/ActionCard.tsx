@@ -28,18 +28,18 @@ export function ActionCard({
       onClick={disabled ? undefined : onClick}
       className={`group relative flex w-full h-full flex-col items-center justify-center gap-2 rounded-2xl border outline-none p-4 shadow-md backdrop-blur-md transition-all duration-200 ${
         disabled
-          ? "border-white/10 bg-surface-1/40 opacity-40 cursor-not-allowed filter grayscale"
-          : "border-white/50 bg-surface-1/80 hover:border-primary hover:bg-surface-1 hover:shadow-xl cursor-pointer"
-      } ${isSelected ? "pointer-events-none z-50 ring-2 ring-primary" : ""}`}
+          ? "border-gray-300/40 bg-gray-200/40 opacity-50 cursor-not-allowed filter grayscale"
+          : "border-gray-300/60 bg-gray-100/85 hover:border-primary hover:bg-gray-50 hover:shadow-lg cursor-pointer"
+      } ${isSelected ? "pointer-events-none z-50 ring-2 ring-primary shadow-inner" : ""}`}
     >
       {disabled && (
-        <span className="absolute top-2 right-2 rounded-md bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold text-red-600 border border-red-500/30">
+        <span className="absolute top-2 right-2 rounded-md bg-red-500/10 px-1.5 py-0.5 text-[10px] font-bold text-red-600 border border-red-500/20">
           Bloqueado
         </span>
       )}
 
       <div
-        className={`mb-2 flex h-14 w-14 items-center justify-center rounded-2xl ${iconBg} text-3xl shadow-inner transition-transform duration-300 ${
+        className={`mb-2 flex h-14 w-14 items-center justify-center rounded-2xl ${iconBg} text-3xl shadow-sm transition-transform duration-300 ${
           disabled ? "" : "group-hover:scale-110"
         }`}
       >
