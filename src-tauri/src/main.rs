@@ -1,4 +1,5 @@
-// src-tauri/src/main.rs
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use bb8::Pool;
 use bb8_tiberius::ConnectionManager;
 use tiberius::{AuthMethod, Config};
@@ -7,12 +8,18 @@ use std::env;
 use dotenvy::dotenv;
 use serde::Serialize;
 
-struct DbState {
-    pool: Pool<ConnectionManager>,
+// 1. Declaración de los nuevos módulos
+pub mod models;
+pub mod services;
+pub mod commands;
+
+// 2. Estructura pública para compartir el pool con los servicios
+pub struct DbState {
+    pub pool: Pool<ConnectionManager>,
 }
 
 #[derive(Serialize)]
-#[serde(rename_all = "camelCase")] // Convierte is_admin a isAdmin automáticamente
+#[serde(rename_all = "camelCase")]
 pub struct AuthResponse {
     pub employee_id: i32,
     pub name: String,
@@ -90,7 +97,17 @@ fn main() {
             app.manage(DbState { pool });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![authenticate, check_db_connection])
+        .invoke_handler(tauri::generate_handler![
+            authenticate, 
+            check_db_connection,
+
+            commands::product_commands::get_all_products,
+            commands::product_commands::restock_item,
+            commands::product_commands::deactivate_item,
+            commands::product_commands::upload_item_photo,
+            commands::product_commands::get_all_products 
+            
+        ])
         .run(tauri::generate_context!())
         .expect("error running tauri");
 }

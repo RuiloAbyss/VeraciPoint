@@ -1,18 +1,30 @@
-// src/components/BulkProductCard.tsx
 export interface BulkProductCardProps {
   name: string;
   pricePerKg: number;
-  icon?: string;
+  photo?: string | null;
+  isSelected: boolean;
+  onClick: () => void;
 }
 
-export function BulkProductCard({ name, pricePerKg, icon = "📷" }: BulkProductCardProps) {
+export function BulkProductCard({ name, pricePerKg, photo, isSelected, onClick }: BulkProductCardProps) {
   return (
-    <div className="flex flex-col rounded-2xl bg-surface-1 border border-white/50 p-2 text-center hover:shadow-md transition-shadow cursor-pointer hover:border-primary shadow-sm">
-      <div className="h-24 w-full rounded-xl bg-surface-3 flex items-center justify-center text-3xl mb-2 shadow-inner">
-        {icon}
+    <button
+      onClick={onClick}
+      className={`group flex flex-col items-center rounded-xl bg-white p-2 border shadow-sm transition-all text-center cursor-pointer overflow-hidden ${
+        isSelected ? "border-primary ring-2 ring-primary bg-primary/5" : "border-gray-300/60 hover:border-primary/50"
+      }`}
+    >
+      {/* Contenedor de Imagen Rígido para evitar que se rompa el Grid */}
+      <div className="w-full h-24 bg-gray-200 rounded-lg flex items-center justify-center mb-2 overflow-hidden shrink-0">
+        {photo ? (
+          <img src={`data:image/jpeg;base64,${photo}`} alt={name} className="w-full h-full object-cover" />
+        ) : (
+          <span className="text-3xl opacity-50">📷</span>
+        )}
       </div>
-      <h3 className="text-xs font-bold leading-tight mb-1 text-on-bg">{name}</h3>
-      <p className="text-xs font-semibold text-primary mt-auto">${pricePerKg.toFixed(2)}/kg</p>
-    </div>
+      
+      <p className="font-bold text-[11px] text-on-bg w-full truncate leading-tight">{name}</p>
+      <p className="font-bold text-xs text-primary mt-0.5">${pricePerKg.toFixed(2)}/kg</p>
+    </button>
   );
 }
