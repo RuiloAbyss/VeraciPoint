@@ -14,3 +14,4 @@ export const fetchProducts = async (): Promise<Product[]> => invoke("get_all_pro
 export const restockProduct = async (id: number, qty: number): Promise<void> => invoke("restock_item", { id, qty });
 export const deactivateProduct = async (id: number): Promise<void> => invoke("deactivate_item", { id });
 export const uploadPhoto = async (id: number, base64: string): Promise<void> => invoke("upload_item_photo", { id, base64 });
+export const editProduct = async (id: number, name: string, price: number, barcode: number | null): Promise<void> => invoke("edit_item", { id, name, price, barcode });

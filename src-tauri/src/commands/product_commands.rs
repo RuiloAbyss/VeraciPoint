@@ -22,3 +22,8 @@ pub async fn deactivate_item(id: i32, state: State<'_, DbState>) -> Result<(), S
 pub async fn upload_item_photo(id: i32, base64: String, state: State<'_, DbState>) -> Result<(), String> {
     product_service::upload_photo(&state.pool, id, base64).await
 }
+
+#[tauri::command]
+pub async fn edit_item(id: i32, name: String, price: f64, barcode: Option<i64>, state: tauri::State<'_, crate::DbState>) -> Result<(), String> {
+    crate::services::product_service::edit_product(&state.pool, id, name, price, barcode).await
+}

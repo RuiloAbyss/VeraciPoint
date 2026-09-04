@@ -60,3 +60,11 @@ pub async fn upload_photo(pool: &Pool<ConnectionManager>, id: i32, base64: Strin
     client.execute(query, &[&base64, &id]).await.map_err(|e| e.to_string())?;
     Ok(())
 }
+
+pub async fn edit_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, id: i32, name: String, price: f64, barcode: Option<i64>) -> Result<(), String> {
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    // Usamos una consulta directa para mayor agilidad sin requerir el ID de categoría
+    let query = "UPDATE product SET name = @P1, price = @P2, barcode = @P3 WHERE productId = @P4";
+    client.execute(query, &[&name, &price, &barcode, &id]).await.map_err(|e| e.to_string())?;
+    Ok(())
+}

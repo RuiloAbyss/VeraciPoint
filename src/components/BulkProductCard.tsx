@@ -7,24 +7,31 @@ export interface BulkProductCardProps {
 }
 
 export function BulkProductCard({ name, pricePerKg, photo, isSelected, onClick }: BulkProductCardProps) {
+  const cleanPhoto = photo ? photo.replace(/\s+/g, '') : null;
+
   return (
     <button
       onClick={onClick}
-      className={`group flex flex-col items-center rounded-xl bg-white p-2 border shadow-sm transition-all text-center cursor-pointer overflow-hidden ${
-        isSelected ? "border-primary ring-2 ring-primary bg-primary/5" : "border-gray-300/60 hover:border-primary/50"
+      className={`group flex flex-col items-center rounded-xl bg-white p-2 transition-all text-center cursor-pointer border ${
+        isSelected 
+          ? "border-primary bg-primary/5 shadow-md" 
+          : "border-gray-200 hover:border-primary/50 shadow-sm"
       }`}
     >
-      {/* Contenedor de Imagen Rígido para evitar que se rompa el Grid */}
-      <div className="w-full h-24 bg-gray-200 rounded-lg flex items-center justify-center mb-2 overflow-hidden shrink-0">
-        {photo ? (
-          <img src={`data:image/jpeg;base64,${photo}`} alt={name} className="w-full h-full object-cover" />
+      {/* Contenedor de imagen más alto y responsivo */}
+      <div className="w-full h-28 bg-gray-50 rounded-lg flex items-center justify-center mb-2 overflow-hidden shrink-0 border border-gray-100">
+        {cleanPhoto ? (
+          <img src={`data:image/jpeg;base64,${cleanPhoto}`} alt={name} className="w-full h-full object-cover" />
         ) : (
-          <span className="text-3xl opacity-50">📷</span>
+          <span className="text-3xl opacity-30">📷</span>
         )}
       </div>
       
-      <p className="font-bold text-[11px] text-on-bg w-full truncate leading-tight">{name}</p>
-      <p className="font-bold text-xs text-primary mt-0.5">${pricePerKg.toFixed(2)}/kg</p>
+      {/* Se le dio una altura mínima al texto para que no se oculte ni rompa */}
+      <p className="font-bold text-xs text-gray-900 w-full line-clamp-2 leading-tight min-h-[2rem] flex items-center justify-center">
+        {name}
+      </p>
+      <p className="font-bold text-sm text-primary mt-1">${pricePerKg.toFixed(2)}/kg</p>
     </button>
   );
 }
