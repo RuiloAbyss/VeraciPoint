@@ -104,9 +104,10 @@ fn main() {
             commands::product_commands::get_all_products,
             commands::product_commands::restock_item,
             commands::product_commands::deactivate_item,
+            commands::product_commands::discard_item_stock,
             commands::product_commands::upload_item_photo,
-            commands::product_commands::get_all_products, 
-            commands::product_commands::edit_item
+            commands::product_commands::edit_item,
+            commands::product_commands::create_item
             
         ])
         .run(tauri::generate_context!())

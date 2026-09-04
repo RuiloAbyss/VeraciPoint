@@ -37,15 +37,19 @@ pub async fn fetch_all_products(pool: &Pool<ConnectionManager>) -> Result<Vec<Pr
     Ok(products)
 }
 
-pub async fn restock_product(pool: &Pool<ConnectionManager>, id: i32, qty: f64) -> Result<(), String> {
+pub async fn restock_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, id: i32, qty: f64) -> Result<(), String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
-    client.execute("EXEC sp_Reabastecer @P1, @P2", &[&id, &qty]).await.map_err(|e| e.to_string())?;
+    // UPDATE directo con CAST para garantizar compatibilidad del flotante con el DECIMAL de SQL
+    let query = "UPDATE product SET quantity = quantity + CAST(@P1 AS DECIMAL(10,2)) WHERE productId = @P2";
+    client.execute(query, &[&qty, &id]).await.map_err(|e| e.to_string())?;
     Ok(())
 }
 
-pub async fn deactivate_product(pool: &Pool<ConnectionManager>, id: i32) -> Result<(), String> {
+pub async fn deactivate_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, id: i32) -> Result<(), String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
-    client.execute("EXEC sp_SuspenderProducto @P1", &[&id]).await.map_err(|e| e.to_string())?;
+    // UPDATE directo en lugar de SP para dar de baja
+    let query = "UPDATE product SET status = 0 WHERE productId = @P1";
+    client.execute(query, &[&id]).await.map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -61,10 +65,35 @@ pub async fn upload_photo(pool: &Pool<ConnectionManager>, id: i32, base64: Strin
     Ok(())
 }
 
-pub async fn edit_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, id: i32, name: String, price: f64, barcode: Option<i64>) -> Result<(), String> {
+pub async fn edit_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, id: i32, name: String, price: f64, barcode: Option<i64>, category: String, sellformat: String) -> Result<(), String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
-    // Usamos una consulta directa para mayor agilidad sin requerir el ID de categoría
-    let query = "UPDATE product SET name = @P1, price = @P2, barcode = @P3 WHERE productId = @P4";
-    client.execute(query, &[&name, &price, &barcode, &id]).await.map_err(|e| e.to_string())?;
+    let query = "
+        DECLARE @catId VARCHAR(36) = (SELECT TOP 1 categoryId FROM category WHERE name = @P5);
+        IF @catId IS NULL SET @catId = 'FRUTAS-VERDURAS';
+        UPDATE product SET name = @P1, price = @P2, barcode = @P3, categoryId = @catId, sellformat = @P6 WHERE productId = @P4;
+    ";
+    client.execute(query, &[&name, &price, &barcode, &id, &category, &sellformat]).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub async fn create_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, name: String, price: f64, category: String, barcode: Option<i64>, sellformat: String, quantity: f64) -> Result<i32, String> {
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let query = "
+        DECLARE @catId VARCHAR(36) = (SELECT TOP 1 categoryId FROM category WHERE name = @P1);
+        IF @catId IS NULL SET @catId = 'BIMBO'; 
+        INSERT INTO product (name, price, categoryId, barcode, sellformat, quantity, status)
+        OUTPUT INSERTED.productId
+        VALUES (@P2, @P3, @catId, @P4, @P5, @P6, 1);
+    ";
+    let stream = client.query(query, &[&category, &name, &price, &barcode, &sellformat, &quantity]).await.map_err(|e| e.to_string())?;
+    let row = stream.into_row().await.map_err(|e| e.to_string())?.ok_or("Error obteniendo ID")?;
+    let new_id: i32 = row.get(0).unwrap_or(0);
+    Ok(new_id)
+}
+
+pub async fn discard_stock(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, id: i32, qty: f64) -> Result<(), String> {
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let query = "UPDATE product SET quantity = quantity - CAST(@P1 AS DECIMAL(10,2)) WHERE productId = @P2";
+    client.execute(query, &[&qty, &id]).await.map_err(|e| e.to_string())?;
     Ok(())
 }

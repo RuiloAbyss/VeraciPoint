@@ -1,12 +1,13 @@
 export interface BulkProductCardProps {
   name: string;
   pricePerKg: number;
+  stock: number;
   photo?: string | null;
   isSelected: boolean;
   onClick: () => void;
 }
 
-export function BulkProductCard({ name, pricePerKg, photo, isSelected, onClick }: BulkProductCardProps) {
+export function BulkProductCard({ name, pricePerKg, stock, photo, isSelected, onClick }: BulkProductCardProps) {
   const cleanPhoto = photo ? photo.replace(/\s+/g, '') : null;
 
   return (
@@ -18,7 +19,6 @@ export function BulkProductCard({ name, pricePerKg, photo, isSelected, onClick }
           : "border-gray-200 hover:border-primary/50 shadow-sm"
       }`}
     >
-      {/* Contenedor de imagen más alto y responsivo */}
       <div className="w-full h-28 bg-gray-50 rounded-lg flex items-center justify-center mb-2 overflow-hidden shrink-0 border border-gray-100">
         {cleanPhoto ? (
           <img src={`data:image/jpeg;base64,${cleanPhoto}`} alt={name} className="w-full h-full object-cover" />
@@ -27,11 +27,14 @@ export function BulkProductCard({ name, pricePerKg, photo, isSelected, onClick }
         )}
       </div>
       
-      {/* Se le dio una altura mínima al texto para que no se oculte ni rompa */}
       <p className="font-bold text-xs text-gray-900 w-full line-clamp-2 leading-tight min-h-[2rem] flex items-center justify-center">
         {name}
       </p>
-      <p className="font-bold text-sm text-primary mt-1">${pricePerKg.toFixed(2)}/kg</p>
+      
+      <div className="flex flex-col items-center mt-1">
+        <p className="font-bold text-sm text-primary">${pricePerKg.toFixed(2)}/kg</p>
+        <p className="font-bold text-[10px] text-gray-500 uppercase tracking-wide">Aprox. {stock.toFixed(3)} Kg.</p>
+      </div>
     </button>
   );
 }

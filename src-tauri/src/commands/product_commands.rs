@@ -19,11 +19,37 @@ pub async fn deactivate_item(id: i32, state: State<'_, DbState>) -> Result<(), S
 }
 
 #[tauri::command]
+pub async fn discard_item_stock(id: i32, qty: f64, state: State<'_, DbState>) -> Result<(), String> {
+    product_service::discard_stock(&state.pool, id, qty).await
+}
+
+#[tauri::command]
 pub async fn upload_item_photo(id: i32, base64: String, state: State<'_, DbState>) -> Result<(), String> {
     product_service::upload_photo(&state.pool, id, base64).await
 }
 
 #[tauri::command]
-pub async fn edit_item(id: i32, name: String, price: f64, barcode: Option<i64>, state: tauri::State<'_, crate::DbState>) -> Result<(), String> {
-    crate::services::product_service::edit_product(&state.pool, id, name, price, barcode).await
+pub async fn edit_item(
+    id: i32,
+    name: String,
+    price: f64,
+    barcode: Option<i64>,
+    category: String,
+    sellformat: String,
+    state: State<'_, DbState>,
+) -> Result<(), String> {
+    product_service::edit_product(&state.pool, id, name, price, barcode, category, sellformat).await
+}
+
+#[tauri::command]
+pub async fn create_item(
+    name: String,
+    price: f64,
+    category: String,
+    barcode: Option<i64>,
+    sellformat: String,
+    quantity: f64,
+    state: State<'_, DbState>,
+) -> Result<i32, String> {
+    product_service::create_product(&state.pool, name, price, category, barcode, sellformat, quantity).await
 }
