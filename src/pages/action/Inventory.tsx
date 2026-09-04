@@ -41,7 +41,12 @@ export function Inventory() {
     loadData();
   }, []);
 
-  const uniqueCategories = useMemo(() => ["Todas las Categorías", ...Array.from(new Set(products.map(p => p.category)))].sort(), [products]);
+  // ORDEN CORREGIDO: "Todas las Categorías" siempre al inicio
+  const uniqueCategories = useMemo(() => {
+    const sortedCats = Array.from(new Set(products.map(p => p.category))).sort();
+    return ["Todas las Categorías", ...sortedCats];
+  }, [products]);
+  
   const formCategories = uniqueCategories.filter(c => c !== "Todas las Categorías");
 
   const filteredProducts = useMemo(() => {
@@ -53,6 +58,7 @@ export function Inventory() {
     if (categoryFilter !== "Todas las Categorías") result = result.filter(p => p.category === categoryFilter);
     if (stockFilter === "Bajo Stock") result = result.filter(p => p.stock < 10);
     else if (stockFilter === "En Abundancia") result = result.filter(p => p.stock >= 10);
+    
     if (sortOrder === "Ordenar: A-Z") result.sort((a, b) => a.name.localeCompare(b.name));
     else if (sortOrder === "Ordenar: Z-A") result.sort((a, b) => b.name.localeCompare(a.name));
     else if (sortOrder === "Menor Precio") result.sort((a, b) => a.price - b.price);
@@ -147,10 +153,14 @@ export function Inventory() {
             {uniqueCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
           </select>
           <select value={stockFilter} onChange={(e) => setStockFilter(e.target.value)} className="w-full rounded-lg bg-white px-2 py-2 text-sm border border-gray-200 text-gray-700">
-            <option>Stock</option><option>Bajo Stock</option><option>En Abundancia</option>
+            <option value="Niveles de Stock">Niveles de Stock</option>
+            <option value="Bajo Stock">Bajo Stock</option>
+            <option value="En Abundancia">En Abundancia</option>
           </select>
           <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="w-full rounded-lg bg-white px-2 py-2 text-sm border border-gray-200 text-gray-700">
-            <option>A-Z</option><option>Z-A</option><option>Menor Precio</option>
+            <option value="Ordenar: A-Z">Ordenar: A-Z</option>
+            <option value="Ordenar: Z-A">Ordenar: Z-A</option>
+            <option value="Menor Precio">Menor Precio</option>
           </select>
         </div>
 
@@ -165,12 +175,17 @@ export function Inventory() {
 
       <div className="flex lg:hidden bg-gray-200 rounded-xl p-1 shrink-0">
         <button onClick={() => setActiveTab('regular')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer ${activeTab === 'regular' ? 'bg-white shadow-sm text-primary' : 'text-gray-500'}`}>Registrados ({regularProducts.length})</button>
-        <button onClick={() => setActiveTab('bulk')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer ${activeTab === 'bulk' ? 'bg-white shadow-sm text-primary' : 'text-gray-500'}`}>Pesaje ({bulkProducts.length})</button>
+        <button onClick={() => setActiveTab('bulk')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer ${activeTab === 'bulk' ? 'bg-white shadow-sm text-primary' : 'text-gray-500'}`}>A Granel ({bulkProducts.length})</button>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
         <section className={`flex-col flex-1 rounded-2xl bg-gray-100/50 border border-gray-200 p-4 overflow-hidden ${activeTab === 'regular' ? 'flex' : 'hidden lg:flex'}`}>
-          <h2 className="hidden lg:flex text-lg font-bold text-gray-900 mb-3 border-b border-gray-200 pb-2 justify-between">Productos Registrados <span className="text-sm font-semibold text-primary bg-primary/10 px-3 py-0.5 rounded-full">{regularProducts.length}</span></h2>
+          <h2 className="hidden lg:flex text-lg font-bold text-gray-900 mb-3 border-b border-gray-200 pb-2 justify-between items-center">
+            Productos Registrados
+            <span className="text-xs font-extrabold text-primary bg-primary/10 px-3 py-1 rounded-full uppercase tracking-wide">
+              {regularProducts.length} Registrados
+            </span>
+          </h2>
           <div className="overflow-y-auto pr-1 space-y-2 flex-1 custom-scrollbar">
             {isLoading ? <div className="p-4 text-center font-bold text-gray-500">Cargando...</div> : 
               regularProducts.map((prod) => (
@@ -180,7 +195,12 @@ export function Inventory() {
         </section>
 
         <section className={`flex-col lg:w-[45%] xl:w-[40%] rounded-2xl bg-gray-100/50 border border-gray-200 p-4 overflow-hidden ${activeTab === 'bulk' ? 'flex' : 'hidden lg:flex'}`}>
-          <h2 className="hidden lg:flex text-lg font-bold text-gray-900 mb-3 border-b border-gray-200 pb-2 justify-between">Sin Clave (Pesaje) <span className="text-xl">⚖️</span></h2>
+          <h2 className="hidden lg:flex text-lg font-bold text-gray-900 mb-3 border-b border-gray-200 pb-2 justify-between items-center">
+            Sin Clave (Pesaje)
+            <span className="text-xs font-extrabold text-primary bg-orange-50 px-3 py-1 rounded-full uppercase tracking-wide">
+              {bulkProducts.length} A Granel
+            </span>
+          </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 overflow-y-auto pr-1 flex-1 custom-scrollbar content-start">
             {isLoading ? <div className="col-span-full p-4 text-center font-bold text-gray-500">Cargando...</div> :
               bulkProducts.map((prod) => (
