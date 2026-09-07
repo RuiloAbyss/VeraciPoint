@@ -21,23 +21,39 @@ export function Login() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const verifyConnection = async () => {
+    const verifyConnectionAndSession = async () => {
       try {
         await invoke("check_db_connection");
         setDbStatus("active");
+        
+        // 1. Verificar si hay una sesión guardada en localStorage
+        const raw = localStorage.getItem("userSession");
+        if (raw) {
+          const session = JSON.parse(raw);
+          // 2. Si el usuario tenía una caja abierta, consultamos a la BD si sigue activa
+          if (session.employeeId && session.activeTurnId) {
+             const isStillActive = await invoke<boolean>("check_turn_status", { employeeId: session.employeeId });
+             if (isStillActive) {
+                navigate("/dashboard"); // Auto-Login
+                return;
+             } else {
+                // Si en la BD ya se cerró (ej. por otro medio o administrador), limpiamos
+                localStorage.removeItem("userSession");
+             }
+          }
+        }
       } catch (err) {
         setDbStatus("inactive");
       }
     };
-    verifyConnection();
-  }, []);
+    verifyConnectionAndSession();
+  }, [navigate]);
 
-  // Sintaxis moderna de TypeScript para evitar la recarga de página
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault(); // Evita la pantalla blanca
+    e.preventDefault(); 
     if (dbStatus !== "active") return;
     
-    sessionStorage.clear();
+    localStorage.removeItem("userSession"); // Limpiamos cualquier rastro previo
     setHasError(false);
     setIsLoading(true);
 
@@ -47,12 +63,10 @@ export function Login() {
         pin: password 
       });
       
-      console.log("Sesión validada por SQL Server:", userSession);
-      
-      sessionStorage.setItem("userSession", JSON.stringify(userSession));
+      // Guardamos en localStorage para persistencia al cerrar la app
+      localStorage.setItem("userSession", JSON.stringify(userSession));
       navigate("/dashboard");
     } catch (err) {
-      console.error("Error en credenciales:", err);
       setHasError(true);
     } finally {
       setIsLoading(false);

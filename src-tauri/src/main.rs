@@ -101,6 +101,10 @@ fn main() {
             authenticate, 
             check_db_connection,
 
+            commands::turn_commands::open_cash_register,
+            commands::turn_commands::check_turn_status,
+            commands::turn_commands::close_cash_register,
+
             commands::product_commands::get_all_products,
             commands::product_commands::restock_item,
             commands::product_commands::deactivate_item,
