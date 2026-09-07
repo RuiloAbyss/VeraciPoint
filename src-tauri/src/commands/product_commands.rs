@@ -29,27 +29,16 @@ pub async fn upload_item_photo(id: i32, base64: String, state: State<'_, DbState
 }
 
 #[tauri::command]
-pub async fn edit_item(
-    id: i32,
-    name: String,
-    price: f64,
-    barcode: Option<i64>,
-    category: String,
-    sellformat: String,
-    state: State<'_, DbState>,
-) -> Result<(), String> {
-    product_service::edit_product(&state.pool, id, name, price, barcode, category, sellformat).await
+pub async fn edit_item(id: i32, name: String, price: f64, barcode: Option<i64>, category: String, sellformat: String, min_stock: Option<f64>, max_stock: Option<f64>, state: tauri::State<'_, crate::DbState>) -> Result<(), String> {
+    crate::services::product_service::edit_product(&state.pool, id, name, price, barcode, category, sellformat, min_stock, max_stock).await
 }
 
 #[tauri::command]
-pub async fn create_item(
-    name: String,
-    price: f64,
-    category: String,
-    barcode: Option<i64>,
-    sellformat: String,
-    quantity: f64,
-    state: State<'_, DbState>,
-) -> Result<i32, String> {
-    product_service::create_product(&state.pool, name, price, category, barcode, sellformat, quantity).await
+pub async fn create_item(name: String, price: f64, category: String, barcode: Option<i64>, sellformat: String, quantity: f64, min_stock: Option<f64>, max_stock: Option<f64>, state: tauri::State<'_, crate::DbState>) -> Result<i32, String> {
+    crate::services::product_service::create_product(&state.pool, name, price, category, barcode, sellformat, quantity, min_stock, max_stock).await
+}
+
+#[tauri::command]
+pub async fn activate_item(id: i32, state: tauri::State<'_, crate::DbState>) -> Result<(), String> {
+    crate::services::product_service::activate_product(&state.pool, id).await
 }

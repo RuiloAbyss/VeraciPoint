@@ -107,6 +107,7 @@ fn main() {
 
             commands::product_commands::get_all_products,
             commands::product_commands::restock_item,
+            commands::product_commands::activate_item,
             commands::product_commands::deactivate_item,
             commands::product_commands::discard_item_stock,
             commands::product_commands::upload_item_photo,

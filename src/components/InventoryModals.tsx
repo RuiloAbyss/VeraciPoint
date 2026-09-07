@@ -4,7 +4,7 @@ import type { Product } from "../services/productService";
 
 const ModalWrapper = ({ children }: { children: React.ReactNode }) => (
   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-    <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-white rounded-3xl shadow-2xl border border-gray-200 p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+    <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-white rounded-3xl shadow-2xl border border-gray-200 p-6 w-full max-w-md max-h-[90vh] overflow-y-auto custom-scrollbar">
       {children}
     </motion.div>
   </motion.div>
@@ -17,6 +17,11 @@ export function ProductFormModal({ isOpen, product, categories, onClose, onSave 
   const [category, setCategory] = useState(categories[0] || "");
   const [sellformat, setSellformat] = useState("Pieza");
   const [quantity, setQuantity] = useState(0);
+  
+  // Estados para topes
+  const [minStock, setMinStock] = useState<string>("");
+  const [maxStock, setMaxStock] = useState<string>("");
+
   const [hasBarcode, setHasBarcode] = useState(false);
   const [barcode, setBarcode] = useState("");
   
@@ -31,6 +36,11 @@ export function ProductFormModal({ isOpen, product, categories, onClose, onSave 
       setCategory(product?.category || categories[0] || "");
       setSellformat(product?.sellformat || "Pieza");
       setQuantity(isEdit ? (product?.stock || 0) : 0);
+      
+      // Carga de topes
+      setMinStock(product?.minStock !== null && product?.minStock !== undefined ? product.minStock.toString() : "");
+      setMaxStock(product?.maxStock !== null && product?.maxStock !== undefined ? product.maxStock.toString() : "");
+
       setHasBarcode(product ? product.barcode !== null : false);
       setBarcode(product?.barcode ? product.barcode.toString() : "");
       setPhotoPreview(product?.photo ? `data:image/jpeg;base64,${product.photo.replace(/\s+/g, '')}` : null);
@@ -57,7 +67,17 @@ export function ProductFormModal({ isOpen, product, categories, onClose, onSave 
       <h3 className="text-xl font-extrabold text-gray-900 mb-4 border-b pb-2">{isEdit ? "Editar Producto" : "Nuevo Producto"}</h3>
       <form onSubmit={(e) => { 
         e.preventDefault(); 
-        onSave({ name, price, category, sellformat, quantity, barcode: hasBarcode && barcode.trim() !== "" ? barcode : null, newPhotoBase64 }); 
+        onSave({ 
+          name, 
+          price, 
+          category, 
+          sellformat, 
+          quantity, 
+          barcode: hasBarcode && barcode.trim() !== "" ? barcode : null, 
+          minStock: minStock !== "" ? parseFloat(minStock) : null,
+          maxStock: maxStock !== "" ? parseFloat(maxStock) : null,
+          newPhotoBase64 
+        }); 
       }} className="space-y-4">
         
         <div className="w-full h-36 bg-gray-50 rounded-2xl overflow-hidden border-2 border-dashed border-gray-300 flex items-center justify-center relative group cursor-pointer hover:border-primary transition-colors" onClick={() => fileInputRef.current?.click()}>
@@ -97,6 +117,17 @@ export function ProductFormModal({ isOpen, product, categories, onClose, onSave 
               <input type="number" step={sellformat === "Pieza" ? "1" : "0.01"} required min="0" value={quantity} onChange={e => setQuantity(parseFloat(e.target.value) || 0)} className="w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-primary focus:bg-white text-gray-900 font-medium transition-colors" />
             </div>
           )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Stock Mínimo (Opc.)</label>
+            <input type="number" step={sellformat === "Pieza" ? "1" : "0.01"} min="0" value={minStock} onChange={e => setMinStock(e.target.value)} className="w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-primary focus:bg-white text-gray-900 font-medium transition-colors" />
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Stock Máximo (Opc.)</label>
+            <input type="number" step={sellformat === "Pieza" ? "1" : "0.01"} min="0" value={maxStock} onChange={e => setMaxStock(e.target.value)} className="w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-primary focus:bg-white text-gray-900 font-medium transition-colors" />
+          </div>
         </div>
 
         <div className="pt-1 border-t border-gray-200 mt-2">
@@ -147,7 +178,17 @@ export function DeactivateModal({ isOpen, product, onClose, onConfirm }: { isOpe
   useEffect(() => { if (isOpen) { setMode('full'); setQty(""); } }, [isOpen]);
   if (!isOpen || !product) return null;
   const isPieza = product.sellformat === "Pieza";
-  const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => setQty(isPieza ? e.target.value.replace(/[^0-9]/g, '') : e.target.value);
+  
+  const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let val = isPieza ? e.target.value.replace(/[^0-9]/g, '') : e.target.value;
+    
+    // Bloqueo dinámico: Si el valor ingresado supera el stock, lo limitamos al stock actual
+    if (val !== "" && parseFloat(val) > product.stock) {
+      val = product.stock.toString();
+    }
+    
+    setQty(val);
+  };
 
   return (
     <ModalWrapper>
@@ -174,6 +215,7 @@ export function DeactivateModal({ isOpen, product, onClose, onConfirm }: { isOpe
             {mode === 'partial' && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="pt-2">
                 <input type="number" step={isPieza ? "1" : "0.01"} min={isPieza ? "1" : "0.01"} max={product.stock} required value={qty} onChange={handleInput} className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 transition-colors" placeholder={isPieza ? "Cantidad de piezas perdidas..." : "Cantidad en Kg perdida..."} />
+                <p className="text-[10px] text-gray-500 mt-1.5 font-bold uppercase tracking-wide">Stock disponible: <span className="text-orange-600">{product.stock}</span></p>
               </motion.div>
             )}
           </div>

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ProductCard } from "../../components/ProductCard";
 import { BulkProductCard } from "../../components/BulkProductCard";
 import { ProductFormModal, RestockModal, DeactivateModal } from "../../components/InventoryModals";
-import { fetchProducts, restockProduct, deactivateProduct, discardStock, uploadPhoto, editProduct, createProduct, type Product } from "../../services/productService";
+import { fetchProducts, restockProduct, deactivateProduct, activateProduct, discardStock, uploadPhoto, editProduct, createProduct, type Product } from "../../services/productService";
 
 export function Inventory() {
   const navigate = useNavigate();
@@ -36,12 +36,11 @@ export function Inventory() {
   };
 
   useEffect(() => {
-    const raw = sessionStorage.getItem("userSession");
+    const raw = localStorage.getItem("userSession");
     if (raw) setIsAdmin(Boolean(JSON.parse(raw).isAdmin ?? JSON.parse(raw).is_admin));
     loadData();
   }, []);
 
-  // ORDEN CORREGIDO: "Todas las Categorías" siempre al inicio
   const uniqueCategories = useMemo(() => {
     const sortedCats = Array.from(new Set(products.map(p => p.category))).sort();
     return ["Todas las Categorías", ...sortedCats];
@@ -55,13 +54,25 @@ export function Inventory() {
       const lower = searchTerm.toLowerCase();
       result = result.filter(p => p.name.toLowerCase().includes(lower) || (p.barcode && p.barcode.toString().includes(lower)) || p.category.toLowerCase().includes(lower));
     }
+    
+    // Filtro por Estado y Topes
+    if (stockFilter === "Inactivos (Bajas)") {
+        result = result.filter(p => p.status === 0);
+    } else {
+        result = result.filter(p => p.status !== 0);
+        if (stockFilter === "Bajo Stock") {
+            result = result.filter(p => p.stock <= 0 || (p.minStock !== null && p.stock <= p.minStock));
+        } else if (stockFilter === "En Abundancia") {
+            result = result.filter(p => p.stock > 0 && (p.minStock === null || p.stock > p.minStock));
+        }
+    }
+
     if (categoryFilter !== "Todas las Categorías") result = result.filter(p => p.category === categoryFilter);
-    if (stockFilter === "Bajo Stock") result = result.filter(p => p.stock < 10);
-    else if (stockFilter === "En Abundancia") result = result.filter(p => p.stock >= 10);
     
     if (sortOrder === "Ordenar: A-Z") result.sort((a, b) => a.name.localeCompare(b.name));
     else if (sortOrder === "Ordenar: Z-A") result.sort((a, b) => b.name.localeCompare(a.name));
     else if (sortOrder === "Menor Precio") result.sort((a, b) => a.price - b.price);
+    
     return result;
   }, [products, searchTerm, categoryFilter, stockFilter, sortOrder]);
 
@@ -79,24 +90,48 @@ export function Inventory() {
     } catch { showToast("Error al surtir inventario", "error"); }
   };
 
+  const executeActivate = async () => {
+    if (!selectedId) return;
+    try {
+      await activateProduct(selectedId);
+      setSelectedId(null);
+      showToast("Producto reactivado exitosamente", "success");
+      loadData();
+    } catch { showToast("Error al dar de alta", "error"); }
+  };
+
   const executeFormSave = async (data: any) => {
     try {
       const code = data.barcode ? parseInt(data.barcode) : null;
       if (modalState === 'create') {
-        const newId = await createProduct(data.name, data.price, data.category, code, data.sellformat, data.quantity);
+        const newId = await createProduct(data.name, data.price, data.category, code, data.sellformat, data.quantity, data.minStock, data.maxStock);
         if (data.newPhotoBase64) await uploadPhoto(newId, data.newPhotoBase64);
         showToast("Producto registrado exitosamente", "success");
       } else {
         if (!selectedId || !selectedProduct) return;
         const currentCode = selectedProduct.barcode ? selectedProduct.barcode.toString() : null;
-        const hasChanges = data.name !== selectedProduct.name || data.price !== selectedProduct.price || data.barcode !== currentCode || data.category !== selectedProduct.category || data.sellformat !== selectedProduct.sellformat || data.newPhotoBase64 !== null;
+        
+        // Normalizamos a null para evitar falsos negativos en la detección de cambios
+        const prevMin = selectedProduct.minStock ?? null;
+        const prevMax = selectedProduct.maxStock ?? null;
+        
+        const hasChanges = 
+            data.name !== selectedProduct.name || 
+            data.price !== selectedProduct.price || 
+            data.barcode !== currentCode || 
+            data.category !== selectedProduct.category || 
+            data.sellformat !== selectedProduct.sellformat ||
+            data.minStock !== prevMin ||
+            data.maxStock !== prevMax ||
+            data.newPhotoBase64 !== null;
 
         if (!hasChanges) {
           setModalState('none');
           showToast("No se detectaron cambios", "cancel");
           return;
         }
-        await editProduct(selectedId, data.name, data.price, code, data.category, data.sellformat);
+        
+        await editProduct(selectedId, data.name, data.price, code, data.category, data.sellformat, data.minStock, data.maxStock);
         if (data.newPhotoBase64) await uploadPhoto(selectedId, data.newPhotoBase64);
         showToast("Producto actualizado", "success");
       }
@@ -156,6 +191,7 @@ export function Inventory() {
             <option value="Niveles de Stock">Niveles de Stock</option>
             <option value="Bajo Stock">Bajo Stock</option>
             <option value="En Abundancia">En Abundancia</option>
+            <option value="Inactivos (Bajas)">Inactivos (Bajas)</option>
           </select>
           <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="w-full rounded-lg bg-white px-2 py-2 text-sm border border-gray-200 text-gray-700">
             <option value="Ordenar: A-Z">Ordenar: A-Z</option>
@@ -166,10 +202,18 @@ export function Inventory() {
 
         <div className="hidden lg:block w-px h-8 bg-gray-200 mx-1" />
 
-        <div className={`grid grid-cols-3 gap-2 w-full lg:w-auto transition-opacity duration-300 ${selectedProduct ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
-          <button onClick={() => setModalState('restock')} className="w-full rounded-lg bg-primary/10 hover:bg-primary hover:text-white py-2 text-xs font-bold text-primary shadow-sm cursor-pointer">+ Surtir</button>
-          <button disabled={!isAdmin} onClick={() => setModalState('edit')} className={`w-full rounded-lg py-2 text-xs font-bold shadow-sm ${isAdmin ? "bg-orange-50 text-orange-600 hover:bg-orange-500 hover:text-white cursor-pointer" : "bg-gray-100 text-gray-400"}`}>✏️ Editar</button>
-          <button disabled={!isAdmin} onClick={() => setModalState('deactivate')} className={`w-full rounded-lg py-2 text-xs font-bold shadow-sm ${isAdmin ? "bg-red-50 text-red-600 hover:bg-red-500 hover:text-white cursor-pointer" : "bg-gray-100 text-gray-400"}`}>🗑️ Baja</button>
+        <div className={`grid ${selectedProduct?.status === 0 ? "grid-cols-1" : "grid-cols-3"} gap-2 w-full lg:w-auto transition-opacity duration-300 ${selectedProduct ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
+          {selectedProduct?.status === 0 ? (
+            <button onClick={executeActivate} className="w-full rounded-lg bg-green-100 hover:bg-green-500 hover:text-white py-2 px-6 text-xs font-bold text-green-700 shadow-sm cursor-pointer transition-colors">
+              ⬆️ Dar de Alta
+            </button>
+          ) : (
+            <>
+              <button onClick={() => setModalState('restock')} className="w-full rounded-lg bg-primary/10 hover:bg-primary hover:text-white py-2 text-xs font-bold text-primary shadow-sm cursor-pointer">+ Surtir</button>
+              <button disabled={!isAdmin} onClick={() => setModalState('edit')} className={`w-full rounded-lg py-2 text-xs font-bold shadow-sm ${isAdmin ? "bg-orange-50 text-orange-600 hover:bg-orange-500 hover:text-white cursor-pointer" : "bg-gray-100 text-gray-400"}`}>✏️ Editar</button>
+              <button disabled={!isAdmin} onClick={() => setModalState('deactivate')} className={`w-full rounded-lg py-2 text-xs font-bold shadow-sm ${isAdmin ? "bg-red-50 text-red-600 hover:bg-red-500 hover:text-white cursor-pointer" : "bg-gray-100 text-gray-400"}`}>🗑️ Baja</button>
+            </>
+          )}
         </div>
       </div>  
 
@@ -204,7 +248,7 @@ export function Inventory() {
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 overflow-y-auto pr-1 flex-1 custom-scrollbar content-start">
             {isLoading ? <div className="col-span-full p-4 text-center font-bold text-gray-500">Cargando...</div> :
               bulkProducts.map((prod) => (
-                <BulkProductCard key={prod.id} name={prod.name} pricePerKg={prod.price} stock={prod.stock} photo={prod.photo} isSelected={selectedId === prod.id} onClick={() => setSelectedId(selectedId === prod.id ? null : prod.id)} />
+                <BulkProductCard key={prod.id} name={prod.name} pricePerKg={prod.price} stock={prod.stock} minStock={prod.minStock} status={prod.status} photo={prod.photo} isSelected={selectedId === prod.id} onClick={() => setSelectedId(selectedId === prod.id ? null : prod.id)} />
               ))}
           </div>
         </section>
