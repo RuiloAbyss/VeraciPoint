@@ -6,7 +6,8 @@ import bgImage from "./assets/wallpaper-login.jpg";
 import { Login } from "./pages/access/Login";
 import { Dashboard } from "./pages/access/Dashboard";
 import { Inventory } from "./pages/action/Inventory";
-import { ErrorBoundary } from "./components/ErrorBoundary"; // <-- IMPORTACIÓN
+import { Sells } from "./pages/action/Sells";
+import { ErrorBoundary } from "./components/ErrorBoundary"; 
 
 const PlaceholderView = ({ title }: { title: string }) => (
   <div className="flex h-screen w-full items-center justify-center text-2xl font-bold text-on-bg">
@@ -23,10 +24,14 @@ function AnimatedRoutes() {
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/sells" element={<PlaceholderView title="Realizar Ventas" />} />
+        
+        {/* Componentes Reales Implementados */}
         <Route path="/inventory" element={<Inventory />} />
+        <Route path="/sells" element={<Sells />} />
+        
+        {/* Módulos en Espera (Placeholders) */}
         <Route path="/history" element={<PlaceholderView title="Historial de Ventas" />} />
-        <Route path="/endTurn" element={<PlaceholderView title="Cerrar Caja" />} />
+        <Route path="/orders" element={<PlaceholderView title="Orden de Pedido" />} />
         <Route path="/employees" element={<PlaceholderView title="Control de Personal" />} />
         <Route path="/reports" element={<PlaceholderView title="Reportes" />} />
       </Routes>
@@ -43,7 +48,6 @@ export default function App() {
       >
         <div className="absolute inset-0 bg-white/70 backdrop-blur-[3px]" />
         
-        {/* ENVUELVE LAS RUTAS CON EL ESCUDO */}
         <ErrorBoundary>
           <AnimatedRoutes />
         </ErrorBoundary>

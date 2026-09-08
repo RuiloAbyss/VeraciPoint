@@ -8,12 +8,10 @@ use std::env;
 use dotenvy::dotenv;
 use serde::Serialize;
 
-// 1. Declaración de los nuevos módulos
 pub mod models;
 pub mod services;
 pub mod commands;
 
-// 2. Estructura pública para compartir el pool con los servicios
 pub struct DbState {
     pub pool: Pool<ConnectionManager>,
 }
@@ -112,8 +110,9 @@ fn main() {
             commands::product_commands::discard_item_stock,
             commands::product_commands::upload_item_photo,
             commands::product_commands::edit_item,
-            commands::product_commands::create_item
-            
+            commands::product_commands::create_item,
+
+            commands::sells_commands::register_new_sale
         ])
         .run(tauri::generate_context!())
         .expect("error running tauri");
