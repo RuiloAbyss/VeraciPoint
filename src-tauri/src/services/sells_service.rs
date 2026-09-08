@@ -47,13 +47,8 @@ pub async fn register_sale(
         let q_detail = "
             INSERT INTO sells_detail (ventaId, productId, quantity, subtotal)
             VALUES (@P1, @P2, CAST(@P3 AS DECIMAL(10,2)), CAST(@P4 AS DECIMAL(10,2)));
-            
-            UPDATE product 
-            SET quantity = quantity - CAST(@P3 AS DECIMAL(10,2))
-            WHERE productId = @P2;
         ";
         if let Err(e) = client.execute(q_detail, &[&venta_id, &detail.product_id, &detail.quantity, &detail.subtotal]).await {
-            // Rollback con simple_query
             let _ = client.simple_query("ROLLBACK TRAN;").await;
             return Err(format!("Error en detalle: {}", e));
         }
