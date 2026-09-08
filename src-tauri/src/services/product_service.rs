@@ -74,7 +74,7 @@ pub async fn activate_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>,
 pub async fn restock_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, id: i32, qty: f64) -> Result<(), String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
     // UPDATE directo con CAST para garantizar compatibilidad del flotante con el DECIMAL de SQL
-    let query = "UPDATE product SET quantity = quantity + CAST(@P1 AS DECIMAL(10,2)) WHERE productId = @P2";
+    let query = "UPDATE product SET quantity = quantity + CAST(@P1 AS DECIMAL(10,3)) WHERE productId = @P2";
     client.execute(query, &[&qty, &id]).await.map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -101,7 +101,7 @@ pub async fn upload_photo(pool: &Pool<ConnectionManager>, id: i32, base64: Strin
 
 pub async fn discard_stock(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, id: i32, qty: f64) -> Result<(), String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
-    let query = "UPDATE product SET quantity = quantity - CAST(@P1 AS DECIMAL(10,2)) WHERE productId = @P2";
+    let query = "UPDATE product SET quantity = quantity - CAST(@P1 AS DECIMAL(10,3)) WHERE productId = @P2";
     client.execute(query, &[&qty, &id]).await.map_err(|e| e.to_string())?;
     Ok(())
 }

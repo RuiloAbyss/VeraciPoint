@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ProductCard } from "../../components/ProductCard";
@@ -24,13 +24,27 @@ export function Sells() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'regular' | 'bulk'>('regular');
   const [searchTerm, setSearchTerm] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("Todas las Categorías");
+  const [categoryFilter, setCategoryFilter] = useState("Categoría");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCash, setIsCash] = useState(true);
   const [toast, setToast] = useState<{ msg: string, type: 'success' | 'error' | 'info' } | null>(null);
 
+  const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+  const [categorySearch, setCategorySearch] = useState("");
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
+
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 30; 
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
+        setIsCategoryOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -66,9 +80,17 @@ export function Sells() {
   const safeProducts = useMemo(() => Array.isArray(products) ? products : [], [products]);
 
   const uniqueCategories = useMemo(() => {
-    const sortedCats = Array.from(new Set(safeProducts.map(p => p.category || "Sin Categoría"))).sort();
-    return ["Todas las Categorías", ...sortedCats];
+    const rawCats = Array.from(new Set(safeProducts.map(p => p.category || "Sin Categoría")))
+      .filter(c => c !== "Categoría" && c !== "Todas las Categorías" && c !== "Ofertas")
+      .sort((a, b) => a.localeCompare(b));
+    return ["Categoría", "Ofertas", ...rawCats];
   }, [safeProducts]);
+
+  const filteredCategories = useMemo(() => {
+    if (!categorySearch) return uniqueCategories;
+    const lower = categorySearch.toLowerCase();
+    return uniqueCategories.filter(c => c.toLowerCase().includes(lower) || c === "Categoría");
+  }, [uniqueCategories, categorySearch]);
 
   const filteredProducts = useMemo(() => {
     let result = safeProducts.filter(p => p.status !== 0 && (Number(p.stock) || 0) > 0);
@@ -81,7 +103,7 @@ export function Sells() {
         (p.category && p.category.toLowerCase().includes(lower))
       );
     }
-    if (categoryFilter !== "Todas las Categorías") {
+    if (categoryFilter !== "Categoría" && categoryFilter !== "Todas las Categorías") {
         result = result.filter(p => p.category === categoryFilter);
     }
     return result.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
@@ -185,7 +207,7 @@ export function Sells() {
         <button 
           disabled={currentPage === 1} 
           onClick={() => setCurrentPage(p => p - 1)} 
-          className="px-2 py-1.5 lg:px-4 lg:py-2 bg-gray-100 rounded-lg text-[10px] lg:text-xs font-bold disabled:opacity-50 text-gray-700 hover:bg-gray-200 transition-colors cursor-pointer"
+          className="px-2 py-1.5 lg:px-4 lg:py-2 bg-white border border-gray-200 rounded-lg text-[10px] lg:text-xs font-bold disabled:opacity-50 text-gray-700 hover:ring-2 hover:ring-primary hover:border-transparent cursor-pointer transition-all shadow-sm"
         >
           <span className="hidden sm:inline">Anterior</span><span className="sm:hidden">◀</span>
         </button>
@@ -195,7 +217,7 @@ export function Sells() {
         <button 
           disabled={currentPage === totalPages} 
           onClick={() => setCurrentPage(p => p + 1)} 
-          className="px-2 py-1.5 lg:px-4 lg:py-2 bg-gray-100 rounded-lg text-[10px] lg:text-xs font-bold disabled:opacity-50 text-gray-700 hover:bg-gray-200 transition-colors cursor-pointer"
+          className="px-2 py-1.5 lg:px-4 lg:py-2 bg-white border border-gray-200 rounded-lg text-[10px] lg:text-xs font-bold disabled:opacity-50 text-gray-700 hover:ring-2 hover:ring-primary hover:border-transparent cursor-pointer transition-all shadow-sm"
         >
           <span className="hidden sm:inline">Siguiente</span><span className="sm:hidden">▶</span>
         </button>
@@ -222,9 +244,53 @@ export function Sells() {
         <div className="flex flex-col flex-1 min-w-[120px] gap-2 lg:gap-3 min-h-0">
             <div className="flex flex-col xl:flex-row items-center gap-2 rounded-xl bg-white border border-gray-200 p-2 shadow-sm shrink-0">
                 <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyDown={handleSearchKeyDown} placeholder="🔍 Buscar..." autoFocus className="w-full rounded-lg bg-gray-50 px-3 py-2 text-sm outline-none border border-gray-200 focus:border-primary transition-colors" />
-                <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="w-full xl:w-1/3 rounded-lg bg-white px-2 py-2 text-sm border border-gray-200 outline-none cursor-pointer">
-                    {uniqueCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                </select>
+                
+                <div className="relative w-full xl:w-1/3" ref={categoryDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setIsCategoryOpen(prev => !prev)}
+                    className="w-full flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm border border-gray-200 text-gray-700 outline-none hover:border-gray-300 cursor-pointer"
+                  >
+                    <span className={`truncate font-medium ${categoryFilter === "Ofertas" ? "text-orange-600 font-bold" : ""}`}>
+                      {categoryFilter}
+                    </span>
+                    <span className="text-[10px] text-gray-400">▼</span>
+                  </button>
+
+                  {isCategoryOpen && (
+                    <div className="absolute top-full left-0 mt-1.5 w-full bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-2 flex flex-col gap-1.5">
+                      <input
+                        type="text"
+                        autoFocus
+                        value={categorySearch}
+                        onChange={(e) => setCategorySearch(e.target.value)}
+                        placeholder="Filtrar categoría..."
+                        className="w-full rounded-md bg-gray-50 border border-gray-200 px-2.5 py-1 text-xs outline-none focus:border-primary"
+                      />
+                      <div className="max-h-48 overflow-y-auto custom-scrollbar flex flex-col space-y-0.5">
+                        {filteredCategories.map(cat => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => {
+                              setCategoryFilter(cat);
+                              setIsCategoryOpen(false);
+                              setCategorySearch("");
+                            }}
+                            className={`text-left px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                              categoryFilter === cat ? "bg-primary/10 text-primary" : "hover:bg-gray-100"
+                            } ${cat === "Ofertas" ? "text-orange-600 font-bold hover:bg-orange-50" : "text-gray-700"}`}
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                        {filteredCategories.length === 0 && (
+                          <span className="text-center text-xs text-gray-400 py-2">Sin coincidencias</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
             </div>
             
             <div className="flex flex-col sm:flex-row bg-gray-200 rounded-xl p-1 shrink-0 gap-1 sm:gap-0">
@@ -254,7 +320,7 @@ export function Sells() {
                             })}
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 content-start">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2 content-start">
                             {paginatedList.map((prod) => {
                                 const originalPrice = prod.category === "Ofertas" ? safeProducts.find(p => p.name === prod.name && p.category !== "Ofertas")?.price : undefined;
                                 return (

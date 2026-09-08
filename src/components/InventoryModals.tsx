@@ -106,7 +106,7 @@ export function ProductFormModal({ isOpen, product, categories, onClose, onSave 
           {!isEdit && (
             <div>
               <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Stock Inicial</label>
-              <input type="number" step={sellformat === "Pieza" ? "1" : "0.01"} required min="0" value={quantity} onChange={e => setQuantity(e.target.value)} className="w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-primary focus:bg-white text-gray-900 font-medium transition-colors" />
+              <input type="number" step={sellformat === "Pieza" ? "1" : "0.001"} required min="0" value={quantity} onChange={e => setQuantity(e.target.value)} className="w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-primary focus:bg-white text-gray-900 font-medium transition-colors" />
             </div>
           )}
         </div>
@@ -114,11 +114,11 @@ export function ProductFormModal({ isOpen, product, categories, onClose, onSave 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Stock Mínimo (Opc.)</label>
-            <input type="number" step={sellformat === "Pieza" ? "1" : "0.01"} min="0" value={minStock} onChange={e => setMinStock(e.target.value)} className="w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-primary focus:bg-white text-gray-900 font-medium transition-colors" />
+            <input type="number" step={sellformat === "Pieza" ? "1" : "0.001"} min="0" value={minStock} onChange={e => setMinStock(e.target.value)} className="w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-primary focus:bg-white text-gray-900 font-medium transition-colors" />
           </div>
           <div>
             <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Stock Máximo (Opc.)</label>
-            <input type="number" step={sellformat === "Pieza" ? "1" : "0.01"} min="0" value={maxStock} onChange={e => setMaxStock(e.target.value)} className="w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-primary focus:bg-white text-gray-900 font-medium transition-colors" />
+            <input type="number" step={sellformat === "Pieza" ? "1" : "0.001"} min="0" value={maxStock} onChange={e => setMaxStock(e.target.value)} className="w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-primary focus:bg-white text-gray-900 font-medium transition-colors" />
           </div>
         </div>
 
@@ -153,7 +153,7 @@ export function RestockModal({ isOpen, product, onClose, onConfirm }: { isOpen: 
       <h3 className="text-xl font-extrabold text-gray-900 mb-2 border-b pb-2">Surtir Inventario</h3>
       <p className="text-sm text-gray-600 mb-4">Añadir existencias a: <strong className="text-gray-900">{product.name}</strong></p>
       <form onSubmit={(e) => { e.preventDefault(); const num = parseFloat(qty); if (num > 0) onConfirm(num); }}>
-        <input type="number" step={isPieza ? "1" : "0.01"} min={isPieza ? "1" : "0.01"} required value={qty} onChange={handleInput} className="w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-3 text-lg outline-none focus:border-primary mb-4 text-center font-bold text-primary transition-colors" placeholder={isPieza ? "Cantidad de piezas..." : "Cantidad a granel..."} />
+        <input type="number" step={isPieza ? "1" : "0.001"} min={isPieza ? "1" : "0.001"} required value={qty} onChange={handleInput} className="w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-3 text-lg outline-none focus:border-primary mb-4 text-center font-bold text-primary transition-colors" placeholder={isPieza ? "Cantidad de piezas..." : "Cantidad a granel..."} />
         <div className="flex gap-3">
           <button type="button" onClick={onClose} className="flex-1 rounded-xl bg-gray-100 px-4 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-200 cursor-pointer transition-colors">Cancelar</button>
           <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white hover:brightness-90 cursor-pointer transition-all">Surtir</button>
@@ -203,7 +203,7 @@ export function DeactivateModal({ isOpen, product, onClose, onConfirm }: { isOpe
 
             {mode === 'partial' && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="pt-2">
-                <input type="number" step={isPieza ? "1" : "0.01"} min={isPieza ? "1" : "0.01"} max={product.stock} required value={qty} onChange={handleInput} className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 transition-colors" placeholder={isPieza ? "Cantidad de piezas perdidas..." : "Cantidad en Kg perdida..."} />
+                <input type="number" step={isPieza ? "1" : "0.001"} min={isPieza ? "1" : "0.001"} max={product.stock} required value={qty} onChange={handleInput} className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 transition-colors" placeholder={isPieza ? "Cantidad de piezas perdidas..." : "Cantidad en Kg perdida..."} />
                 <p className="text-[10px] text-gray-500 mt-1.5 font-bold uppercase tracking-wide">Stock disponible: <span className="text-orange-600">{product.stock}</span></p>
               </motion.div>
             )}
@@ -254,7 +254,7 @@ export function OfferModal({ isOpen, product, onClose, onConfirm }: { isOpen: bo
           <div className="space-y-4 mb-6">
              <div>
                 <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Cantidad a separar</label>
-                <input type="number" step={isPieza ? "1" : "0.01"} min={isPieza ? "1" : "0.01"} max={product.stock} required value={qty} onChange={handleQty} className="w-full rounded-xl border border-orange-200 bg-orange-50/30 px-4 py-3 text-sm outline-none focus:border-orange-500 focus:bg-white font-bold transition-colors" placeholder={isPieza ? "Piezas a ofertar..." : "Kg a ofertar..."} />
+                <input type="number" step={isPieza ? "1" : "0.001"} min={isPieza ? "1" : "0.001"} max={product.stock} required value={qty} onChange={handleQty} className="w-full rounded-xl border border-orange-200 bg-orange-50/30 px-4 py-3 text-sm outline-none focus:border-orange-500 focus:bg-white font-bold transition-colors" placeholder={isPieza ? "Piezas a ofertar..." : "Kg a ofertar..."} />
                 <div className="flex justify-between items-center mt-1.5">
                     <p className="text-[10px] text-gray-500 font-bold uppercase">Stock origen: {product.stock}</p>
                     <p className="text-[10px] text-gray-500 font-bold uppercase">Precio original: <span className="text-gray-700">${product.price.toFixed(2)}</span></p>
@@ -271,6 +271,52 @@ export function OfferModal({ isOpen, product, onClose, onConfirm }: { isOpen: bo
             <button type="submit" className="flex-1 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-orange-600 transition-all shadow-md shadow-orange-500/20">Generar Oferta</button>
           </div>
         </form>
+      </div>
+    </ModalWrapper>
+  );
+}
+
+export function DeleteConfirmModal({
+  isOpen,
+  productName,
+  onClose,
+  onConfirm
+}: {
+  isOpen: boolean;
+  productName: string;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <ModalWrapper>
+      <div className="text-center p-2">
+        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl shadow-sm">
+          🗑️
+        </div>
+        <h3 className="text-xl font-extrabold text-gray-900 mb-2">Eliminar Producto</h3>
+        <p className="text-sm text-gray-600 mb-6 leading-relaxed">
+          ¿Estás seguro de que deseas eliminar permanentemente <strong className="text-gray-900">"{productName}"</strong> de la base de datos? <br/>
+          <span className="text-xs text-red-500 font-semibold">Esta acción no se puede deshacer. Su registro en ventas previas se preservará solo como texto.</span>
+        </p>
+
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 rounded-xl bg-gray-100 px-4 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-200 transition-colors cursor-pointer"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="flex-1 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700 transition-all shadow-md shadow-red-600/30 cursor-pointer"
+          >
+            Sí, eliminar
+          </button>
+        </div>
       </div>
     </ModalWrapper>
   );

@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { invoke } from "@tauri-apps/api/core";
 import { motion, AnimatePresence } from "framer-motion";
 import { ProductCard } from "../../components/ProductCard";
 import { BulkProductCard } from "../../components/BulkProductCard";
-import { ProductFormModal, RestockModal, DeactivateModal, OfferModal } from "../../components/InventoryModals";
-import { fetchProducts, restockProduct, deactivateProduct, activateProduct, discardStock, uploadPhoto, editProduct, createProduct, deleteProductHard, type Product } from "../../services/productService";
+import { ProductFormModal, RestockModal, DeactivateModal, OfferModal, DeleteConfirmModal } from "../../components/InventoryModals";
+import { fetchProducts, restockProduct, deactivateProduct, activateProduct, discardStock, uploadPhoto, editProduct, createProduct, type Product } from "../../services/productService";
 import { useLoading } from "../../components/LoadingContext"; 
 
 export function Inventory() {
@@ -17,17 +18,32 @@ export function Inventory() {
   const [activeTab, setActiveTab] = useState<'regular' | 'bulk'>('regular');
   const [toast, setToast] = useState<{ msg: string, type: 'success' | 'cancel' | 'delete' | 'error' } | null>(null);
   const [errorModal, setErrorModal] = useState<{ isOpen: boolean; title: string; details: string }>({ isOpen: false, title: "", details: "" });
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("Todas las Categorías");
+  const [categoryFilter, setCategoryFilter] = useState("Categoría");
   const [stockFilter, setStockFilter] = useState("Niveles de Stock");
   const [sortOrder, setSortOrder] = useState("Ordenar: A-Z");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [modalState, setModalState] = useState<'none' | 'edit' | 'create' | 'restock' | 'deactivate' | 'offer'>('none');
 
+  const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+  const [categorySearch, setCategorySearch] = useState("");
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
+
   const [currentRegularPage, setCurrentRegularPage] = useState(1);
   const [currentBulkPage, setCurrentBulkPage] = useState(1);
-  const itemsPerPage = 40; 
+  const itemsPerPage = 30; // Ajustado a 30 elementos por página
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
+        setIsCategoryOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
       setCurrentRegularPage(1); 
@@ -47,7 +63,7 @@ export function Inventory() {
       setProducts(Array.isArray(data) ? data : []); 
     } 
     catch (error: any) { 
-      setErrorModal({ isOpen: true, title: "Error al cargar inventario", details: typeof error === 'string' ? error : JSON.stringify(error) }); 
+      setErrorModal({ isOpen: true, title: "Error al cargar inventario", details: String(error) }); 
     } 
     finally { setIsLoading(false); }
   };
@@ -61,11 +77,19 @@ export function Inventory() {
   const safeProducts = useMemo(() => Array.isArray(products) ? products : [], [products]);
 
   const uniqueCategories = useMemo(() => {
-    const sortedCats = Array.from(new Set(safeProducts.map(p => p.category || "Sin Categoría"))).sort();
-    return ["Todas las Categorías", ...sortedCats];
+    const rawCats = Array.from(new Set(safeProducts.map(p => p.category || "Sin Categoría")))
+      .filter(c => c !== "Categoría" && c !== "Todas las Categorías" && c !== "Ofertas")
+      .sort((a, b) => a.localeCompare(b));
+    return ["Categoría", "Ofertas", ...rawCats];
   }, [safeProducts]);
+
+  const filteredCategories = useMemo(() => {
+    if (!categorySearch) return uniqueCategories;
+    const lower = categorySearch.toLowerCase();
+    return uniqueCategories.filter(c => c.toLowerCase().includes(lower) || c === "Categoría");
+  }, [uniqueCategories, categorySearch]);
   
-  const formCategories = uniqueCategories.filter(c => c !== "Todas las Categorías" && c !== "Ofertas");
+  const formCategories = uniqueCategories.filter(c => c !== "Categoría" && c !== "Ofertas");
   if (!formCategories.includes("Ofertas")) formCategories.push("Ofertas");
 
   const filteredProducts = useMemo(() => {
@@ -79,22 +103,25 @@ export function Inventory() {
       );
     }
     
-    if (stockFilter === "Inactivos (Bajas)") {
+    if (stockFilter === "Descontinuado") {
         result = result.filter(p => p.status === 0);
     } else {
         result = result.filter(p => p.status !== 0);
-        if (stockFilter === "Bajo Stock") {
-            result = result.filter(p => Number(p.stock) <= 0 || (p.minStock !== null && Number(p.stock) <= Number(p.minStock)));
-        } else if (stockFilter === "En Abundancia") {
-            result = result.filter(p => Number(p.stock) > 0 && (p.minStock === null || Number(p.stock) > Number(p.minStock)));
+        if (stockFilter === "Sin stock") {
+            result = result.filter(p => Number(p.stock) <= 0);
+        } else if (stockFilter === "Bajo") {
+            result = result.filter(p => Number(p.stock) > 0 && (p.minStock !== null && Number(p.stock) <= Number(p.minStock)));
         }
     }
 
-    if (categoryFilter !== "Todas las Categorías") result = result.filter(p => p.category === categoryFilter);
+    if (categoryFilter !== "Categoría") result = result.filter(p => p.category === categoryFilter);
     
     if (sortOrder === "Ordenar: A-Z") result.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     else if (sortOrder === "Ordenar: Z-A") result.sort((a, b) => (b.name || "").localeCompare(a.name || ""));
     else if (sortOrder === "Menor Precio") result.sort((a, b) => Number(a.price) - Number(b.price));
+    else if (sortOrder === "Código de Barras") {
+      result.sort((a, b) => Number(a.barcode || 0) - Number(b.barcode || 0));
+    }
     
     return result;
   }, [safeProducts, searchTerm, categoryFilter, stockFilter, sortOrder]);
@@ -151,10 +178,6 @@ export function Inventory() {
         }
       }
 
-      if (selectedProduct.stock - qty <= 0) {
-        await deactivateProduct(selectedId);
-      }
-
       showToast("Oferta generada", "success");
       setModalState('none');
       await loadData();
@@ -180,12 +203,11 @@ export function Inventory() {
 
   const executeHardDelete = async () => {
     if (!selectedId) return;
-    if (!window.confirm("¿Estás seguro de eliminar este producto definitivamente de la base de datos?")) return;
-    
     setLoading(true);
     try {
-      await deleteProductHard(selectedId);
+      await invoke("delete_item_hard", { id: selectedId });
       setSelectedId(null);
+      setIsDeleteModalOpen(false);
       showToast("Producto borrado definitivamente", "delete");
       await loadData();
     } catch (error: any) { 
@@ -238,9 +260,6 @@ export function Inventory() {
         showToast("Producto inhabilitado", "cancel");
       } else if (qty && qty > 0) {
         await discardStock(selectedId, qty);
-        if (selectedProduct.stock - qty <= 0) {
-           await deactivateProduct(selectedId);
-        }
         showToast("Merma registrada", "success");
       }
       setModalState('none');
@@ -289,9 +308,9 @@ export function Inventory() {
           </div>
         </div>
         
-        {isAdmin && stockFilter === "Inactivos (Bajas)" ? (
+        {isAdmin && stockFilter === "Descontinuado" ? (
           <button 
-            onClick={executeHardDelete} 
+            onClick={() => setIsDeleteModalOpen(true)} 
             disabled={!selectedId}
             className={`rounded-lg px-4 py-2 text-xs font-bold text-white shadow-sm transition-all ${selectedId ? 'bg-red-600 hover:brightness-90 cursor-pointer' : 'bg-red-300 cursor-not-allowed'}`}
           >
@@ -305,30 +324,78 @@ export function Inventory() {
             NUEVO PRODUCTO
           </button>
         ) : null}
-
       </header>
 
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 rounded-xl bg-white border border-gray-200 p-3 shadow-sm shrink-0">
         <div className="flex-1 w-full min-w-0">
           <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="🔍 Buscar nombre o código..." className="w-full rounded-lg bg-gray-50 px-4 py-2 text-sm outline-none border border-gray-200 focus:border-primary" />
         </div>
+        
         <div className="hidden lg:block w-px h-8 bg-gray-200 mx-1" />
+        
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full lg:w-auto">
-          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="w-full rounded-lg bg-white px-2 py-2 text-sm border border-gray-200 text-gray-700 col-span-2 sm:col-span-1">
-            {uniqueCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-          </select>
-          <select value={stockFilter} onChange={(e) => setStockFilter(e.target.value)} className="w-full rounded-lg bg-white px-2 py-2 text-sm border border-gray-200 text-gray-700">
+          <div className="relative col-span-2 sm:col-span-1" ref={categoryDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setIsCategoryOpen(prev => !prev)}
+              className="w-full flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm border border-gray-200 text-gray-700 outline-none hover:border-gray-300 cursor-pointer"
+            >
+              <span className={`truncate font-medium ${categoryFilter === "Ofertas" ? "text-orange-600 font-bold" : ""}`}>
+                {categoryFilter}
+              </span>
+              <span className="text-[10px] text-gray-400">▼</span>
+            </button>
+
+            {isCategoryOpen && (
+              <div className="absolute top-full left-0 mt-1.5 w-full sm:w-56 bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-2 flex flex-col gap-1.5">
+                <input
+                  type="text"
+                  autoFocus
+                  value={categorySearch}
+                  onChange={(e) => setCategorySearch(e.target.value)}
+                  placeholder="Filtrar categoría..."
+                  className="w-full rounded-md bg-gray-50 border border-gray-200 px-2.5 py-1 text-xs outline-none focus:border-primary"
+                />
+                <div className="max-h-48 overflow-y-auto custom-scrollbar flex flex-col space-y-0.5">
+                  {filteredCategories.map(cat => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => {
+                        setCategoryFilter(cat);
+                        setIsCategoryOpen(false);
+                        setCategorySearch("");
+                      }}
+                      className={`text-left px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                        categoryFilter === cat ? "bg-primary/10 text-primary" : "hover:bg-gray-100"
+                      } ${cat === "Ofertas" ? "text-orange-600 font-bold hover:bg-orange-50" : "text-gray-700"}`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                  {filteredCategories.length === 0 && (
+                    <span className="text-center text-xs text-gray-400 py-2">Sin coincidencias</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <select value={stockFilter} onChange={(e) => setStockFilter(e.target.value)} className="w-full rounded-lg bg-white px-2 py-2 text-sm border border-gray-200 text-gray-700 outline-none cursor-pointer">
             <option value="Niveles de Stock">Niveles de Stock</option>
-            <option value="Bajo Stock">Bajo Stock</option>
-            <option value="En Abundancia">En Abundancia</option>
-            <option value="Inactivos (Bajas)">Inactivos (Bajas)</option>
+            <option value="Bajo">Bajo</option>
+            <option value="Sin stock">Sin stock</option>
+            <option value="Descontinuado">Descontinuado</option>
           </select>
-          <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="w-full rounded-lg bg-white px-2 py-2 text-sm border border-gray-200 text-gray-700">
+
+          <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="w-full rounded-lg bg-white px-2 py-2 text-sm border border-gray-200 text-gray-700 outline-none cursor-pointer">
             <option value="Ordenar: A-Z">Ordenar: A-Z</option>
             <option value="Ordenar: Z-A">Ordenar: Z-A</option>
             <option value="Menor Precio">Menor Precio</option>
+            <option value="Código de Barras">Código de Barras</option>
           </select>
         </div>
+
         <div className="hidden lg:block w-px h-8 bg-gray-200 mx-1" />
         
         <div className={`grid ${selectedProduct?.status === 0 ? "grid-cols-1" : "grid-cols-2 lg:grid-cols-4"} gap-2 w-full lg:w-auto transition-opacity duration-300 ${selectedProduct ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
@@ -374,7 +441,7 @@ export function Inventory() {
                 )
               })}
           </div>
-          {totalRegularPages > 1 && activeTab === 'regular' && renderPagination(currentRegularPage, totalRegularPages, setCurrentRegularPage, regularProducts.length)}
+          {totalRegularPages > 1 && renderPagination(currentRegularPage, totalRegularPages, setCurrentRegularPage, regularProducts.length)}
         </section>
 
         <section className={`flex-col lg:w-[45%] xl:w-[40%] rounded-2xl bg-gray-100/50 border border-gray-200 p-4 overflow-hidden ${activeTab === 'bulk' ? 'flex' : 'hidden lg:flex'}`}>
@@ -383,7 +450,7 @@ export function Inventory() {
             <span className="text-xs font-extrabold text-primary bg-orange-50 px-3 py-1 rounded-full uppercase tracking-wide">{bulkProducts.length} A Granel</span>
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 overflow-y-auto pr-1 flex-1 custom-scrollbar content-start">
-            {isLoading ? <div className="col-span-full p-4 text-center font-bold text-gray-500">Cargando...</div> :
+            {isLoading ? <div className="col-span-full p-4 text-center font-bold text-gray-500">Cargando...</div> : 
               paginatedBulk.map((prod) => {
                 const originalPrice = prod.category === "Ofertas" ? safeProducts.find(p => p.name === prod.name && p.category !== "Ofertas")?.price : undefined;
                 return (
@@ -403,7 +470,7 @@ export function Inventory() {
                 )
               })}
           </div>
-          {totalBulkPages > 1 && activeTab === 'bulk' && renderPagination(currentBulkPage, totalBulkPages, setCurrentBulkPage, bulkProducts.length)}
+          {totalBulkPages > 1 && renderPagination(currentBulkPage, totalBulkPages, setCurrentBulkPage, bulkProducts.length)}
         </section>
       </div>
 
@@ -420,9 +487,17 @@ export function Inventory() {
         {modalState === 'restock' && <RestockModal isOpen={true} product={selectedProduct} onClose={closeModals} onConfirm={executeRestock} />}
         {modalState === 'deactivate' && <DeactivateModal isOpen={true} product={selectedProduct} onClose={closeModals} onConfirm={executeDeactivate} />}
         {modalState === 'offer' && <OfferModal isOpen={true} product={selectedProduct} onClose={closeModals} onConfirm={executeOffer} />}
+        
+        {isDeleteModalOpen && selectedProduct && (
+          <DeleteConfirmModal
+            isOpen={isDeleteModalOpen}
+            productName={selectedProduct.name}
+            onClose={() => setIsDeleteModalOpen(false)}
+            onConfirm={executeHardDelete}
+          />
+        )}
       </AnimatePresence>
 
-      {/* MODAL PARA MOSTRAR ERRORES DEL BACKEND */}
       <AnimatePresence>
         {errorModal.isOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">

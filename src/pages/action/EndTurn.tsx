@@ -2,10 +2,13 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { closeTurn } from "../../services/turnService";
+import { useLoading } from "../../components/LoadingContext"; 
 
 export function EndTurn() {
   const navigate = useNavigate();
-  const [endMoney, setEndMoney] = useState<number | "">("");
+  const { setLoading } = useLoading(); 
+  
+  const [endMoney, setEndMoney] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [toast, setToast] = useState<{ msg: string, type: 'success' | 'error' } | null>(null);
 
@@ -19,6 +22,8 @@ export function EndTurn() {
     if (endMoney === "") return;
     
     setIsProcessing(true);
+    setLoading(true); 
+    
     try {
       const raw = localStorage.getItem("userSession");
       if (raw) {
@@ -33,14 +38,19 @@ export function EndTurn() {
       localStorage.removeItem("userSession");
       
       setToast({ msg: "Caja cerrada correctamente", type: "success" });
-      setTimeout(() => navigate("/login"), 1500);
+      
+      // Mantenemos la pantalla de carga durante la transición
+      setTimeout(() => {
+        setLoading(false);
+        navigate("/login");
+      }, 1500);
       
     } catch (error) {
+      setLoading(false);
       setToast({ msg: "Error al cerrar la caja", type: "error" });
       setTimeout(() => setToast(null), 3000);
-    } finally {
       setIsProcessing(false);
-    }
+    } 
   };
 
   return (
@@ -70,8 +80,9 @@ export function EndTurn() {
               required 
               autoFocus
               value={endMoney} 
-              onChange={e => setEndMoney(parseFloat(e.target.value))} 
+              onChange={e => setEndMoney(e.target.value)} 
               className="w-full rounded-2xl border border-gray-300 bg-gray-50 px-4 py-4 text-3xl font-extrabold text-red-500 text-center outline-none focus:border-red-500 focus:bg-white focus:ring-4 focus:ring-red-500/20 transition-all" 
+              placeholder="0.00"
             />
           </div>
           
@@ -79,7 +90,8 @@ export function EndTurn() {
             <button 
               type="button" 
               onClick={() => navigate("/dashboard")}
-              className="flex-1 rounded-2xl bg-gray-100 px-4 py-4 text-sm font-bold text-gray-600 hover:bg-gray-200 transition-colors cursor-pointer"
+              disabled={isProcessing}
+              className="flex-1 rounded-2xl bg-gray-100 px-4 py-4 text-sm font-bold text-gray-600 hover:bg-gray-200 transition-colors cursor-pointer disabled:opacity-50"
             >
               Cancelar
             </button>
@@ -88,7 +100,7 @@ export function EndTurn() {
               disabled={isProcessing}
               className="flex-1 rounded-2xl bg-red-500 px-4 py-4 text-sm font-bold text-white hover:bg-red-600 transition-all shadow-lg shadow-red-500/30 disabled:opacity-50 cursor-pointer"
             >
-              {isProcessing ? "Procesando..." : "Confirmar"}
+              {isProcessing ? "Cerrando..." : "Confirmar"}
             </button>
           </div>
         </form>
