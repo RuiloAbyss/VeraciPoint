@@ -11,10 +11,9 @@ pub async fn register_sale(
 ) -> Result<i32, String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
 
-    // Usamos simple_query para iniciar la transacción en texto plano y evitar el Error 266
     client.simple_query("BEGIN TRAN;").await.map_err(|e| e.to_string())?;
 
-    // 1. Registrar Venta (Usamos el query original con execute/query normal para proteger parámetros)
+    // Registrar Venta 
     let insert_sale = "
         INSERT INTO sells (employeeId, sellsDate, cash, total)
         VALUES (@P1, GETDATE(), @P2, CAST(@P3 AS DECIMAL(10,2)));
@@ -36,13 +35,13 @@ pub async fn register_sale(
     let venta_id = match venta_result {
         Ok(id) => id,
         Err(err_msg) => {
-            // Rollback con simple_query
+            // Rollback por si todo sale mal :c
             let _ = client.simple_query("ROLLBACK TRAN;").await;
             return Err(err_msg);
         }
     };
 
-    // 2. Registrar Detalles y Restar Stock
+    // Registrar Detalles y Restar Stock
     for detail in details {
         let q_detail = "
             INSERT INTO sells_detail (ventaId, productId, quantity, subtotal)
@@ -54,9 +53,6 @@ pub async fn register_sale(
         }
     }
 
-    // Nota: El total del corte de caja lo sumaremos consultando esta tabla directamente.
-    
-    // Commit final con simple_query
     client.simple_query("COMMIT TRAN;").await.map_err(|e| e.to_string())?;
 
     Ok(venta_id)

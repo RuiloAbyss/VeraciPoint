@@ -5,14 +5,16 @@ import { ProductCard } from "../../components/ProductCard";
 import { BulkProductCard } from "../../components/BulkProductCard";
 import { ProductFormModal, RestockModal, DeactivateModal } from "../../components/InventoryModals";
 import { fetchProducts, restockProduct, deactivateProduct, activateProduct, discardStock, uploadPhoto, editProduct, createProduct, type Product } from "../../services/productService";
+import { useLoading } from "../../components/LoadingContext"; 
 
 export function Inventory() {
   const navigate = useNavigate();
+  const { setLoading } = useLoading(); 
+  
   const [isAdmin, setIsAdmin] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); 
   const [activeTab, setActiveTab] = useState<'regular' | 'bulk'>('regular');
-  
   const [toast, setToast] = useState<{ msg: string, type: 'success' | 'cancel' | 'delete' | 'error' } | null>(null);
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -20,8 +22,14 @@ export function Inventory() {
   const [stockFilter, setStockFilter] = useState("Niveles de Stock");
   const [sortOrder, setSortOrder] = useState("Ordenar: A-Z");
   const [selectedId, setSelectedId] = useState<number | null>(null);
-
   const [modalState, setModalState] = useState<'none' | 'edit' | 'create' | 'restock' | 'deactivate'>('none');
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 40; 
+
+  useEffect(() => {
+      setCurrentPage(1); 
+  }, [searchTerm, categoryFilter, stockFilter, sortOrder, activeTab]);
 
   const showToast = (msg: string, type: 'success' | 'cancel' | 'delete' | 'error') => {
     setToast({ msg, type });
@@ -55,7 +63,6 @@ export function Inventory() {
       result = result.filter(p => p.name.toLowerCase().includes(lower) || (p.barcode && p.barcode.toString().includes(lower)) || p.category.toLowerCase().includes(lower));
     }
     
-    // Filtro por Estado y Topes
     if (stockFilter === "Inactivos (Bajas)") {
         result = result.filter(p => p.status === 0);
     } else {
@@ -80,27 +87,37 @@ export function Inventory() {
   const bulkProducts = filteredProducts.filter(p => p.barcode === null);
   const selectedProduct = products.find(p => p.id === selectedId) || null;
 
+  const targetList = activeTab === 'regular' ? regularProducts : bulkProducts;
+  const totalPages = Math.max(1, Math.ceil(targetList.length / itemsPerPage));
+  const paginatedRegular = regularProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const paginatedBulk = bulkProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
   const executeRestock = async (qty: number) => {
     if (!selectedId) return;
+    setLoading(true); 
     try {
       await restockProduct(selectedId, qty);
       showToast("Se sumaron existencias correctamente", "success");
       setModalState('none');
-      loadData();
+      await loadData();
     } catch { showToast("Error al surtir inventario", "error"); }
+    finally { setLoading(false); } 
   };
 
   const executeActivate = async () => {
     if (!selectedId) return;
+    setLoading(true);
     try {
       await activateProduct(selectedId);
       setSelectedId(null);
       showToast("Producto reactivado exitosamente", "success");
-      loadData();
+      await loadData();
     } catch { showToast("Error al dar de alta", "error"); }
+    finally { setLoading(false); }
   };
 
   const executeFormSave = async (data: any) => {
+    setLoading(true);
     try {
       const code = data.barcode ? parseInt(data.barcode) : null;
       if (modalState === 'create') {
@@ -111,37 +128,29 @@ export function Inventory() {
         if (!selectedId || !selectedProduct) return;
         const currentCode = selectedProduct.barcode ? selectedProduct.barcode.toString() : null;
         
-        // Normalizamos a null para evitar falsos negativos en la detección de cambios
         const prevMin = selectedProduct.minStock ?? null;
         const prevMax = selectedProduct.maxStock ?? null;
-        
-        const hasChanges = 
-            data.name !== selectedProduct.name || 
-            data.price !== selectedProduct.price || 
-            data.barcode !== currentCode || 
-            data.category !== selectedProduct.category || 
-            data.sellformat !== selectedProduct.sellformat ||
-            data.minStock !== prevMin ||
-            data.maxStock !== prevMax ||
-            data.newPhotoBase64 !== null;
+        const hasChanges = data.name !== selectedProduct.name || data.price !== selectedProduct.price || data.barcode !== currentCode || data.category !== selectedProduct.category || data.sellformat !== selectedProduct.sellformat || data.minStock !== prevMin || data.maxStock !== prevMax || data.newPhotoBase64 !== null;
 
         if (!hasChanges) {
           setModalState('none');
           showToast("No se detectaron cambios", "cancel");
+          setLoading(false);
           return;
         }
-        
         await editProduct(selectedId, data.name, data.price, code, data.category, data.sellformat, data.minStock, data.maxStock);
         if (data.newPhotoBase64) await uploadPhoto(selectedId, data.newPhotoBase64);
         showToast("Producto actualizado", "success");
       }
       setModalState('none');
-      loadData();
+      await loadData();
     } catch { showToast("Error en el servidor", "error"); }
+    finally { setLoading(false); }
   };
 
   const executeDeactivate = async (mode: 'full' | 'partial', qty?: number) => {
     if (!selectedId) return;
+    setLoading(true);
     try {
       if (mode === 'full') {
         await deactivateProduct(selectedId);
@@ -152,14 +161,29 @@ export function Inventory() {
         showToast("Merma registrada correctamente", "success");
       }
       setModalState('none');
-      loadData();
+      await loadData();
     } catch { showToast("Error procesando solicitud", "error"); }
+    finally { setLoading(false); }
   };
 
   const closeModals = () => {
     setModalState('none');
     showToast("Acción cancelada", "cancel");
   };
+
+  const PaginationControls = () => (
+      <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-200 shrink-0">
+        <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="px-4 py-2 bg-gray-100 rounded-lg text-xs font-bold disabled:opacity-50 text-gray-700 hover:bg-gray-200 cursor-pointer transition-colors">
+          Anterior
+        </button>
+        <span className="text-xs font-bold text-gray-500">
+          Página {currentPage} de {totalPages}
+        </span>
+        <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="px-4 py-2 bg-gray-100 rounded-lg text-xs font-bold disabled:opacity-50 text-gray-700 hover:bg-gray-200 cursor-pointer transition-colors">
+          Siguiente
+        </button>
+      </div>
+  );
 
   return (
     <motion.div className="absolute inset-0 flex flex-col p-2 sm:p-4 lg:p-5 gap-3 text-on-bg z-20 bg-gray-50/50" initial={{ y: "100%" }} animate={{ y: "0%" }} exit={{ y: "100%" }} transition={{ duration: 0.28 }}>
@@ -180,9 +204,7 @@ export function Inventory() {
         <div className="flex-1 w-full min-w-0">
           <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="🔍 Buscar nombre o código..." className="w-full rounded-lg bg-gray-50 px-4 py-2 text-sm outline-none border border-gray-200 focus:border-primary" />
         </div>
-        
         <div className="hidden lg:block w-px h-8 bg-gray-200 mx-1" />
-        
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full lg:w-auto">
           <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="w-full rounded-lg bg-white px-2 py-2 text-sm border border-gray-200 text-gray-700 col-span-2 sm:col-span-1">
             {uniqueCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
@@ -199,14 +221,10 @@ export function Inventory() {
             <option value="Menor Precio">Menor Precio</option>
           </select>
         </div>
-
         <div className="hidden lg:block w-px h-8 bg-gray-200 mx-1" />
-
         <div className={`grid ${selectedProduct?.status === 0 ? "grid-cols-1" : "grid-cols-3"} gap-2 w-full lg:w-auto transition-opacity duration-300 ${selectedProduct ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
           {selectedProduct?.status === 0 ? (
-            <button onClick={executeActivate} className="w-full rounded-lg bg-green-100 hover:bg-green-500 hover:text-white py-2 px-6 text-xs font-bold text-green-700 shadow-sm cursor-pointer transition-colors">
-              ⬆️ Dar de Alta
-            </button>
+            <button onClick={executeActivate} className="w-full rounded-lg bg-green-100 hover:bg-green-500 hover:text-white py-2 px-6 text-xs font-bold text-green-700 shadow-sm cursor-pointer transition-colors">⬆️ Dar de Alta</button>
           ) : (
             <>
               <button onClick={() => setModalState('restock')} className="w-full rounded-lg bg-primary/10 hover:bg-primary hover:text-white py-2 text-xs font-bold text-primary shadow-sm cursor-pointer">+ Surtir</button>
@@ -226,40 +244,36 @@ export function Inventory() {
         <section className={`flex-col flex-1 rounded-2xl bg-gray-100/50 border border-gray-200 p-4 overflow-hidden ${activeTab === 'regular' ? 'flex' : 'hidden lg:flex'}`}>
           <h2 className="hidden lg:flex text-lg font-bold text-gray-900 mb-3 border-b border-gray-200 pb-2 justify-between items-center">
             Productos Registrados
-            <span className="text-xs font-extrabold text-primary bg-primary/10 px-3 py-1 rounded-full uppercase tracking-wide">
-              {regularProducts.length} Registrados
-            </span>
+            <span className="text-xs font-extrabold text-primary bg-primary/10 px-3 py-1 rounded-full uppercase tracking-wide">{regularProducts.length} Registrados</span>
           </h2>
           <div className="overflow-y-auto pr-1 space-y-2 flex-1 custom-scrollbar">
             {isLoading ? <div className="p-4 text-center font-bold text-gray-500">Cargando...</div> : 
-              regularProducts.map((prod) => (
+              paginatedRegular.map((prod) => ( 
                 <ProductCard key={prod.id} {...prod} code={prod.barcode?.toString() || "S/N"} isSelected={selectedId === prod.id} onClick={() => setSelectedId(selectedId === prod.id ? null : prod.id)} />
               ))}
           </div>
+          {totalPages > 1 && activeTab === 'regular' && <PaginationControls />}
         </section>
 
         <section className={`flex-col lg:w-[45%] xl:w-[40%] rounded-2xl bg-gray-100/50 border border-gray-200 p-4 overflow-hidden ${activeTab === 'bulk' ? 'flex' : 'hidden lg:flex'}`}>
           <h2 className="hidden lg:flex text-lg font-bold text-gray-900 mb-3 border-b border-gray-200 pb-2 justify-between items-center">
             Sin Clave (Pesaje)
-            <span className="text-xs font-extrabold text-primary bg-orange-50 px-3 py-1 rounded-full uppercase tracking-wide">
-              {bulkProducts.length} A Granel
-            </span>
+            <span className="text-xs font-extrabold text-primary bg-orange-50 px-3 py-1 rounded-full uppercase tracking-wide">{bulkProducts.length} A Granel</span>
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 overflow-y-auto pr-1 flex-1 custom-scrollbar content-start">
             {isLoading ? <div className="col-span-full p-4 text-center font-bold text-gray-500">Cargando...</div> :
-              bulkProducts.map((prod) => (
+              paginatedBulk.map((prod) => ( 
                 <BulkProductCard key={prod.id} name={prod.name} pricePerKg={prod.price} stock={prod.stock} minStock={prod.minStock} status={prod.status} photo={prod.photo} isSelected={selectedId === prod.id} onClick={() => setSelectedId(selectedId === prod.id ? null : prod.id)} />
               ))}
           </div>
+          {totalPages > 1 && activeTab === 'bulk' && <PaginationControls />}
         </section>
       </div>
 
       <AnimatePresence>
         {toast && (
           <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-            <div className={`px-6 py-3 rounded-full shadow-xl font-bold text-sm flex items-center gap-2 ${toast.type === 'success' ? 'bg-green-500 text-white' : toast.type === 'cancel' ? 'bg-yellow-400 text-yellow-900' : 'bg-red-500 text-white'}`}>
-              {toast.msg}
-            </div>
+            <div className={`px-6 py-3 rounded-full shadow-xl font-bold text-sm flex items-center gap-2 ${toast.type === 'success' ? 'bg-green-500 text-white' : toast.type === 'cancel' ? 'bg-yellow-400 text-yellow-900' : 'bg-red-500 text-white'}`}>{toast.msg}</div>
           </motion.div>
         )}
       </AnimatePresence>

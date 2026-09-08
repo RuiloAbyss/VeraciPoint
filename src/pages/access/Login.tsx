@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { motion } from "framer-motion";
 import bgImage from "../../assets/wallpaper-login.jpg"; 
+import { useLoading } from "../../components/LoadingContext";
 
 type DbStatus = "verifying" | "active" | "inactive";
 
@@ -16,9 +17,10 @@ export function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [hasError, setHasError] = useState(false); 
-  const [isLoading, setIsLoading] = useState(false);
   const [dbStatus, setDbStatus] = useState<DbStatus>("verifying");
   const navigate = useNavigate();
+  
+  const { isLoading, setLoading } = useLoading(); 
 
   useEffect(() => {
     const verifyConnectionAndSession = async () => {
@@ -26,18 +28,15 @@ export function Login() {
         await invoke("check_db_connection");
         setDbStatus("active");
         
-        // 1. Verificar si hay una sesión guardada en localStorage
         const raw = localStorage.getItem("userSession");
         if (raw) {
           const session = JSON.parse(raw);
-          // 2. Si el usuario tenía una caja abierta, consultamos a la BD si sigue activa
           if (session.employeeId && session.activeTurnId) {
              const isStillActive = await invoke<boolean>("check_turn_status", { employeeId: session.employeeId });
              if (isStillActive) {
-                navigate("/dashboard"); // Auto-Login
+                navigate("/dashboard");
                 return;
              } else {
-                // Si en la BD ya se cerró (ej. por otro medio o administrador), limpiamos
                 localStorage.removeItem("userSession");
              }
           }
@@ -53,9 +52,9 @@ export function Login() {
     e.preventDefault(); 
     if (dbStatus !== "active") return;
     
-    localStorage.removeItem("userSession"); // Limpiamos cualquier rastro previo
+    localStorage.removeItem("userSession");
     setHasError(false);
-    setIsLoading(true);
+    setLoading(true); // <-- Mostramos overlay global
 
     try {
       const userSession = await invoke<AuthResponse>("authenticate", { 
@@ -63,13 +62,12 @@ export function Login() {
         pin: password 
       });
       
-      // Guardamos en localStorage para persistencia al cerrar la app
       localStorage.setItem("userSession", JSON.stringify(userSession));
       navigate("/dashboard");
     } catch (err) {
       setHasError(true);
     } finally {
-      setIsLoading(false);
+      setLoading(false); // <-- Ocultamos overlay
     }
   };
 
@@ -152,11 +150,7 @@ export function Login() {
                 : "bg-primary text-on-color hover:bg-secondary hover:text-on-bg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             }`}
           >
-            {dbStatus === "verifying" ? "Conectando..." :
-             dbStatus === "inactive" ? "Sin Conexión" :
-             isLoading ? "Verificando..." :
-             hasError ? "Credenciales incorrectas" : 
-             "Entrar"}
+             Entrar
           </motion.button>
         </form>
       </div>
