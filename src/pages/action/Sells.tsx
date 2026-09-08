@@ -168,7 +168,6 @@ export function Sells() {
     }
   };
 
-  // Función auxiliar para renderizar los controles de paginación inline
   const renderPagination = (totalItems: number) => {
     if (totalItems === 0) return null;
     const start = (currentPage - 1) * itemsPerPage + 1;
@@ -176,13 +175,21 @@ export function Sells() {
 
     return (
       <div className="flex justify-between items-center mt-2 lg:mt-3 pt-2 lg:pt-3 border-t border-gray-200 shrink-0 gap-1">
-        <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="px-2 py-1.5 lg:px-4 lg:py-2 bg-gray-100 rounded-lg text-[10px] lg:text-xs font-bold disabled:opacity-50 text-gray-700 hover:bg-gray-200 transition-colors">
+        <button 
+          disabled={currentPage === 1} 
+          onClick={() => setCurrentPage(p => p - 1)} 
+          className="px-2 py-1.5 lg:px-4 lg:py-2 bg-white border border-gray-200 rounded-lg text-[10px] lg:text-xs font-bold disabled:opacity-50 text-gray-700 hover:ring-2 hover:ring-primary hover:border-transparent cursor-pointer transition-all shadow-sm"
+        >
           <span className="hidden sm:inline">Anterior</span><span className="sm:hidden">◀</span>
         </button>
         <span className="text-[9px] sm:text-[10px] lg:text-xs font-bold text-gray-500 text-center leading-tight">
           Mostrando {start} - {end} <br className="sm:hidden"/> de {totalItems} productos
         </span>
-        <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="px-2 py-1.5 lg:px-4 lg:py-2 bg-gray-100 rounded-lg text-[10px] lg:text-xs font-bold disabled:opacity-50 text-gray-700 hover:bg-gray-200 transition-colors">
+        <button 
+          disabled={currentPage === totalPages} 
+          onClick={() => setCurrentPage(p => p + 1)} 
+          className="px-2 py-1.5 lg:px-4 lg:py-2 bg-white border border-gray-200 rounded-lg text-[10px] lg:text-xs font-bold disabled:opacity-50 text-gray-700 hover:ring-2 hover:ring-primary hover:border-transparent cursor-pointer transition-all shadow-sm"
+        >
           <span className="hidden sm:inline">Siguiente</span><span className="sm:hidden">▶</span>
         </button>
       </div>
@@ -203,10 +210,8 @@ export function Sells() {
         </div>
       </header>
 
-      {/* Contenedor divisor: flex-row forzado. El carrito tiene pixelaje fijo, el catálogo toma el resto (flex-1) */}
       <div className="flex flex-row gap-2 lg:gap-4 flex-1 min-h-0 w-full overflow-hidden">
         
-        {/* PANEL IZQUIERDO: CATÁLOGO (Toma el espacio restante flex-1 y se puede encoger) */}
         <div className="flex flex-col flex-1 min-w-[120px] gap-2 lg:gap-3 min-h-0">
             <div className="flex flex-col xl:flex-row items-center gap-2 rounded-xl bg-white border border-gray-200 p-2 shadow-sm shrink-0">
                 <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyDown={handleSearchKeyDown} placeholder="🔍 Buscar..." autoFocus className="w-full rounded-lg bg-gray-50 px-3 py-2 text-sm outline-none border border-gray-200 focus:border-primary transition-colors" />
@@ -241,7 +246,6 @@ export function Sells() {
             </section>
         </div>
 
-        {/* PANEL DERECHO: CARRITO (Tamaño fijo, prioridad estricta de espacio) */}
         <div className="flex flex-col w-[200px] sm:w-[280px] lg:w-[400px] shrink-0 rounded-2xl bg-white border border-gray-200 shadow-sm min-h-0 overflow-hidden">
           <div className="bg-gray-50 p-2 lg:p-4 border-b border-gray-200 flex justify-between items-center shrink-0">
             <h2 className="text-sm lg:text-lg font-bold text-gray-900 truncate">Lista de Cobro</h2>

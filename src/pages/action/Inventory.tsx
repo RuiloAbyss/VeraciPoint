@@ -24,11 +24,15 @@ export function Inventory() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [modalState, setModalState] = useState<'none' | 'edit' | 'create' | 'restock' | 'deactivate'>('none');
 
-  const [currentPage, setCurrentPage] = useState(1);
+  // Estados de paginación independientes
+  const [currentRegularPage, setCurrentRegularPage] = useState(1);
+  const [currentBulkPage, setCurrentBulkPage] = useState(1);
   const itemsPerPage = 40; 
 
+  // Reiniciar ambas páginas al cambiar los filtros
   useEffect(() => {
-      setCurrentPage(1); 
+      setCurrentRegularPage(1); 
+      setCurrentBulkPage(1);
   }, [searchTerm, categoryFilter, stockFilter, sortOrder, activeTab]);
 
   const showToast = (msg: string, type: 'success' | 'cancel' | 'delete' | 'error') => {
@@ -87,10 +91,12 @@ export function Inventory() {
   const bulkProducts = filteredProducts.filter(p => p.barcode === null);
   const selectedProduct = products.find(p => p.id === selectedId) || null;
 
-  const targetList = activeTab === 'regular' ? regularProducts : bulkProducts;
-  const totalPages = Math.max(1, Math.ceil(targetList.length / itemsPerPage));
-  const paginatedRegular = regularProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-  const paginatedBulk = bulkProducts.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  // Cálculos independientes por lista
+  const totalRegularPages = Math.max(1, Math.ceil(regularProducts.length / itemsPerPage));
+  const totalBulkPages = Math.max(1, Math.ceil(bulkProducts.length / itemsPerPage));
+  
+  const paginatedRegular = regularProducts.slice((currentRegularPage - 1) * itemsPerPage, currentRegularPage * itemsPerPage);
+  const paginatedBulk = bulkProducts.slice((currentBulkPage - 1) * itemsPerPage, currentBulkPage * itemsPerPage);
 
   const executeRestock = async (qty: number) => {
     if (!selectedId) return;
@@ -171,21 +177,34 @@ export function Inventory() {
     showToast("Acción cancelada", "cancel");
   };
 
-  // Función auxiliar para renderizar los controles de paginación inline
-  const renderPagination = (totalItems: number) => {
+  // Función genérica para renderizar paginación con estilos actualizados
+  const renderPagination = (
+    currentPage: number, 
+    totalPages: number, 
+    setPage: React.Dispatch<React.SetStateAction<number>>, 
+    totalItems: number
+  ) => {
     if (totalItems === 0) return null;
     const start = (currentPage - 1) * itemsPerPage + 1;
     const end = Math.min(currentPage * itemsPerPage, totalItems);
 
     return (
       <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-200 shrink-0 gap-2">
-        <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="px-3 py-2 sm:px-4 bg-gray-100 rounded-lg text-xs font-bold disabled:opacity-50 text-gray-700 hover:bg-gray-200 cursor-pointer transition-colors">
+        <button 
+          disabled={currentPage === 1} 
+          onClick={() => setPage(p => p - 1)} 
+          className="px-3 py-2 sm:px-4 bg-white border border-gray-200 rounded-lg text-xs font-bold disabled:opacity-50 text-gray-700 hover:ring-2 hover:ring-primary hover:border-transparent cursor-pointer transition-all shadow-sm"
+        >
           <span className="hidden sm:inline">Anterior</span><span className="sm:hidden">◀</span>
         </button>
         <span className="text-[10px] sm:text-xs font-bold text-gray-500 text-center">
-          Mostrando {start} - {end} de {totalItems} productos
+          Mostrando {start} - {end} de {totalItems}
         </span>
-        <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="px-3 py-2 sm:px-4 bg-gray-100 rounded-lg text-xs font-bold disabled:opacity-50 text-gray-700 hover:bg-gray-200 cursor-pointer transition-colors">
+        <button 
+          disabled={currentPage === totalPages} 
+          onClick={() => setPage(p => p + 1)} 
+          className="px-3 py-2 sm:px-4 bg-white border border-gray-200 rounded-lg text-xs font-bold disabled:opacity-50 text-gray-700 hover:ring-2 hover:ring-primary hover:border-transparent cursor-pointer transition-all shadow-sm"
+        >
           <span className="hidden sm:inline">Siguiente</span><span className="sm:hidden">▶</span>
         </button>
       </div>
@@ -235,8 +254,8 @@ export function Inventory() {
           ) : (
             <>
               <button onClick={() => setModalState('restock')} className="w-full rounded-lg bg-primary/10 hover:bg-primary hover:text-white py-2 text-xs font-bold text-primary shadow-sm cursor-pointer">+ Surtir</button>
-              <button disabled={!isAdmin} onClick={() => setModalState('edit')} className={`w-full rounded-lg py-2 text-xs font-bold shadow-sm ${isAdmin ? "bg-orange-50 text-orange-600 hover:bg-orange-500 hover:text-white cursor-pointer" : "bg-gray-100 text-gray-400"}`}>✏️ Editar</button>
-              <button disabled={!isAdmin} onClick={() => setModalState('deactivate')} className={`w-full rounded-lg py-2 text-xs font-bold shadow-sm ${isAdmin ? "bg-red-50 text-red-600 hover:bg-red-500 hover:text-white cursor-pointer" : "bg-gray-100 text-gray-400"}`}>🗑️ Baja</button>
+              <button disabled={!isAdmin} onClick={() => setModalState('edit')} className={`w-full rounded-lg py-2 text-xs font-bold shadow-sm ${isAdmin ? "bg-white border border-orange-200 text-orange-600 hover:ring-2 hover:ring-orange-400 cursor-pointer transition-all" : "bg-gray-100 text-gray-400"}`}>✏️ Editar</button>
+              <button disabled={!isAdmin} onClick={() => setModalState('deactivate')} className={`w-full rounded-lg py-2 text-xs font-bold shadow-sm ${isAdmin ? "bg-white border border-red-200 text-red-600 hover:ring-2 hover:ring-red-400 cursor-pointer transition-all" : "bg-gray-100 text-gray-400"}`}>🗑️ Baja</button>
             </>
           )}
         </div>
@@ -259,7 +278,7 @@ export function Inventory() {
                 <ProductCard key={prod.id} {...prod} code={prod.barcode?.toString() || "S/N"} isSelected={selectedId === prod.id} onClick={() => setSelectedId(selectedId === prod.id ? null : prod.id)} />
               ))}
           </div>
-          {totalPages > 1 && activeTab === 'regular' && renderPagination(regularProducts.length)}
+          {totalRegularPages > 1 && renderPagination(currentRegularPage, totalRegularPages, setCurrentRegularPage, regularProducts.length)}
         </section>
 
         <section className={`flex-col lg:w-[45%] xl:w-[40%] rounded-2xl bg-gray-100/50 border border-gray-200 p-4 overflow-hidden ${activeTab === 'bulk' ? 'flex' : 'hidden lg:flex'}`}>
@@ -273,7 +292,7 @@ export function Inventory() {
                 <BulkProductCard key={prod.id} name={prod.name} pricePerKg={prod.price} stock={prod.stock} minStock={prod.minStock} status={prod.status} photo={prod.photo} isSelected={selectedId === prod.id} onClick={() => setSelectedId(selectedId === prod.id ? null : prod.id)} />
               ))}
           </div>
-          {totalPages > 1 && activeTab === 'bulk' && renderPagination(bulkProducts.length)}
+          {totalBulkPages > 1 && renderPagination(currentBulkPage, totalBulkPages, setCurrentBulkPage, bulkProducts.length)}
         </section>
       </div>
 
