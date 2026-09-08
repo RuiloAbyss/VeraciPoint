@@ -171,19 +171,26 @@ export function Inventory() {
     showToast("Acción cancelada", "cancel");
   };
 
-  const PaginationControls = () => (
-      <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-200 shrink-0">
-        <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="px-4 py-2 bg-gray-100 rounded-lg text-xs font-bold disabled:opacity-50 text-gray-700 hover:bg-gray-200 cursor-pointer transition-colors">
-          Anterior
+  // Función auxiliar para renderizar los controles de paginación inline
+  const renderPagination = (totalItems: number) => {
+    if (totalItems === 0) return null;
+    const start = (currentPage - 1) * itemsPerPage + 1;
+    const end = Math.min(currentPage * itemsPerPage, totalItems);
+
+    return (
+      <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-200 shrink-0 gap-2">
+        <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="px-3 py-2 sm:px-4 bg-gray-100 rounded-lg text-xs font-bold disabled:opacity-50 text-gray-700 hover:bg-gray-200 cursor-pointer transition-colors">
+          <span className="hidden sm:inline">Anterior</span><span className="sm:hidden">◀</span>
         </button>
-        <span className="text-xs font-bold text-gray-500">
-          Página {currentPage} de {totalPages}
+        <span className="text-[10px] sm:text-xs font-bold text-gray-500 text-center">
+          Mostrando {start} - {end} de {totalItems} productos
         </span>
-        <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="px-4 py-2 bg-gray-100 rounded-lg text-xs font-bold disabled:opacity-50 text-gray-700 hover:bg-gray-200 cursor-pointer transition-colors">
-          Siguiente
+        <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="px-3 py-2 sm:px-4 bg-gray-100 rounded-lg text-xs font-bold disabled:opacity-50 text-gray-700 hover:bg-gray-200 cursor-pointer transition-colors">
+          <span className="hidden sm:inline">Siguiente</span><span className="sm:hidden">▶</span>
         </button>
       </div>
-  );
+    );
+  };
 
   return (
     <motion.div className="absolute inset-0 flex flex-col p-2 sm:p-4 lg:p-5 gap-3 text-on-bg z-20 bg-gray-50/50" initial={{ y: "100%" }} animate={{ y: "0%" }} exit={{ y: "100%" }} transition={{ duration: 0.28 }}>
@@ -242,7 +249,7 @@ export function Inventory() {
 
       <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
         <section className={`flex-col flex-1 rounded-2xl bg-gray-100/50 border border-gray-200 p-4 overflow-hidden ${activeTab === 'regular' ? 'flex' : 'hidden lg:flex'}`}>
-          <h2 className="hidden lg:flex text-lg font-bold text-gray-900 mb-3 border-b border-gray-200 pb-2 justify-between items-center">
+          <h2 className="hidden lg:flex text-lg font-bold text-gray-900 mb-3 border-b border-gray-200 pb-2 justify-between items-center shrink-0">
             Productos Registrados
             <span className="text-xs font-extrabold text-primary bg-primary/10 px-3 py-1 rounded-full uppercase tracking-wide">{regularProducts.length} Registrados</span>
           </h2>
@@ -252,11 +259,11 @@ export function Inventory() {
                 <ProductCard key={prod.id} {...prod} code={prod.barcode?.toString() || "S/N"} isSelected={selectedId === prod.id} onClick={() => setSelectedId(selectedId === prod.id ? null : prod.id)} />
               ))}
           </div>
-          {totalPages > 1 && activeTab === 'regular' && <PaginationControls />}
+          {totalPages > 1 && activeTab === 'regular' && renderPagination(regularProducts.length)}
         </section>
 
         <section className={`flex-col lg:w-[45%] xl:w-[40%] rounded-2xl bg-gray-100/50 border border-gray-200 p-4 overflow-hidden ${activeTab === 'bulk' ? 'flex' : 'hidden lg:flex'}`}>
-          <h2 className="hidden lg:flex text-lg font-bold text-gray-900 mb-3 border-b border-gray-200 pb-2 justify-between items-center">
+          <h2 className="hidden lg:flex text-lg font-bold text-gray-900 mb-3 border-b border-gray-200 pb-2 justify-between items-center shrink-0">
             Sin Clave (Pesaje)
             <span className="text-xs font-extrabold text-primary bg-orange-50 px-3 py-1 rounded-full uppercase tracking-wide">{bulkProducts.length} A Granel</span>
           </h2>
@@ -266,7 +273,7 @@ export function Inventory() {
                 <BulkProductCard key={prod.id} name={prod.name} pricePerKg={prod.price} stock={prod.stock} minStock={prod.minStock} status={prod.status} photo={prod.photo} isSelected={selectedId === prod.id} onClick={() => setSelectedId(selectedId === prod.id ? null : prod.id)} />
               ))}
           </div>
-          {totalPages > 1 && activeTab === 'bulk' && <PaginationControls />}
+          {totalPages > 1 && activeTab === 'bulk' && renderPagination(bulkProducts.length)}
         </section>
       </div>
 
