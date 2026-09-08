@@ -105,3 +105,12 @@ pub async fn discard_stock(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, id
     client.execute(query, &[&qty, &id]).await.map_err(|e| e.to_string())?;
     Ok(())
 }
+
+pub async fn delete_product_hard(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, id: i32) -> Result<(), String> {
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    
+    // Al ejecutar esto, el historial de ventas mantendrá el productName gracias al nuevo Trigger, 
+    // pero el producto desaparecerá físicamente del inventario.
+    client.execute("DELETE FROM product WHERE productId = @P1", &[&id]).await.map_err(|e| e.to_string())?;
+    Ok(())
+}

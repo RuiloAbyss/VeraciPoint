@@ -43,7 +43,10 @@ export function Sells() {
 
   const loadData = async () => {
     setIsLoading(true);
-    try { setProducts(await fetchProducts() || []); } 
+    try { 
+      const data = await fetchProducts();
+      setProducts(Array.isArray(data) ? data : []); 
+    } 
     catch (error) { showToast("Error al cargar inventario", "error"); } 
     finally { setIsLoading(false); }
   };
@@ -60,25 +63,29 @@ export function Sells() {
     loadData();
   }, [navigate]);
 
+  const safeProducts = useMemo(() => Array.isArray(products) ? products : [], [products]);
+
   const uniqueCategories = useMemo(() => {
-    const safeProducts = Array.isArray(products) ? products : [];
     const sortedCats = Array.from(new Set(safeProducts.map(p => p.category || "Sin Categoría"))).sort();
     return ["Todas las Categorías", ...sortedCats];
-  }, [products]);
+  }, [safeProducts]);
 
   const filteredProducts = useMemo(() => {
-    const safeProducts = Array.isArray(products) ? products : [];
-    let result = safeProducts.filter(p => p.status !== 0 && (p.stock || 0) > 0);
+    let result = safeProducts.filter(p => p.status !== 0 && (Number(p.stock) || 0) > 0);
     
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
-      result = result.filter(p => (p.name && p.name.toLowerCase().includes(lower)) || (p.barcode && p.barcode.toString().includes(lower)) || (p.category && p.category.toLowerCase().includes(lower)));
+      result = result.filter(p => 
+        (p.name && p.name.toLowerCase().includes(lower)) || 
+        (p.barcode && p.barcode.toString().includes(lower)) || 
+        (p.category && p.category.toLowerCase().includes(lower))
+      );
     }
     if (categoryFilter !== "Todas las Categorías") {
         result = result.filter(p => p.category === categoryFilter);
     }
     return result.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  }, [products, searchTerm, categoryFilter]);
+  }, [safeProducts, searchTerm, categoryFilter]);
 
   const regularProducts = filteredProducts.filter(p => p.barcode !== null && p.barcode !== undefined);
   const bulkProducts = filteredProducts.filter(p => p.barcode === null || p.barcode === undefined);
@@ -105,13 +112,13 @@ export function Sells() {
     setCart(prev => {
       const existing = prev.find(item => item.product.id === product.id);
       if (existing) {
-        if (Number(existing.quantity) >= (product.stock || 0)) {
+        if (Number(existing.quantity) >= (Number(product.stock) || 0)) {
             showToast("Stock máximo alcanzado", "info");
             return prev;
         }
         return prev.map(item => item.product.id === product.id ? { ...item, quantity: Number(item.quantity) + 1 } : item);
       }
-      return [...prev, { product, quantity: 1, finalPrice: product.price || 0 }];
+      return [...prev, { product, quantity: 1, finalPrice: Number(product.price) || 0 }];
     });
   };
 
@@ -131,9 +138,9 @@ export function Sells() {
 
     setCart(prev => prev.map(item => {
       if (item.product.id === productId) {
-        if (field === 'quantity' && typeof num === 'number' && num > (item.product.stock || 0)) {
+        if (field === 'quantity' && typeof num === 'number' && num > (Number(item.product.stock) || 0)) {
             showToast(`Solo hay ${item.product.stock} disponibles`, "info");
-            return { ...item, quantity: item.product.stock || 0 };
+            return { ...item, quantity: Number(item.product.stock) || 0 };
         }
         return { ...item, [field]: num };
       }
@@ -150,7 +157,7 @@ export function Sells() {
     setLoading(true); 
     try {
       const details: SaleDetailInput[] = cart.map(item => ({
-        productId: item.product.id,
+        productName: item.product.name,
         quantity: Number(item.quantity) || 0,
         subtotal: (Number(item.quantity) || 0) * (Number(item.finalPrice) || 0)
       }));
@@ -178,7 +185,7 @@ export function Sells() {
         <button 
           disabled={currentPage === 1} 
           onClick={() => setCurrentPage(p => p - 1)} 
-          className="px-2 py-1.5 lg:px-4 lg:py-2 bg-white border border-gray-200 rounded-lg text-[10px] lg:text-xs font-bold disabled:opacity-50 text-gray-700 hover:ring-2 hover:ring-primary hover:border-transparent cursor-pointer transition-all shadow-sm"
+          className="px-2 py-1.5 lg:px-4 lg:py-2 bg-gray-100 rounded-lg text-[10px] lg:text-xs font-bold disabled:opacity-50 text-gray-700 hover:bg-gray-200 transition-colors cursor-pointer"
         >
           <span className="hidden sm:inline">Anterior</span><span className="sm:hidden">◀</span>
         </button>
@@ -188,7 +195,7 @@ export function Sells() {
         <button 
           disabled={currentPage === totalPages} 
           onClick={() => setCurrentPage(p => p + 1)} 
-          className="px-2 py-1.5 lg:px-4 lg:py-2 bg-white border border-gray-200 rounded-lg text-[10px] lg:text-xs font-bold disabled:opacity-50 text-gray-700 hover:ring-2 hover:ring-primary hover:border-transparent cursor-pointer transition-all shadow-sm"
+          className="px-2 py-1.5 lg:px-4 lg:py-2 bg-gray-100 rounded-lg text-[10px] lg:text-xs font-bold disabled:opacity-50 text-gray-700 hover:bg-gray-200 transition-colors cursor-pointer"
         >
           <span className="hidden sm:inline">Siguiente</span><span className="sm:hidden">▶</span>
         </button>
@@ -230,15 +237,42 @@ export function Sells() {
                     {isLoading ? <div className="p-4 text-center font-bold text-gray-500">Cargando...</div> : 
                     activeTab === 'regular' ? (
                         <div className="space-y-2">
-                            {paginatedList.map((prod) => (
-                                <ProductCard key={prod.id} {...prod} code={prod.barcode?.toString() || "S/N"} isSelected={false} onClick={() => addToCart(prod)} />
-                            ))}
+                            {paginatedList.map((prod) => {
+                                const originalPrice = prod.category === "Ofertas" ? safeProducts.find(p => p.name === prod.name && p.category !== "Ofertas")?.price : undefined;
+                                return (
+                                  <ProductCard 
+                                    key={prod.id} 
+                                    {...prod} 
+                                    price={Number(prod.price) || 0}
+                                    stock={Number(prod.stock) || 0}
+                                    code={prod.barcode?.toString() || "S/N"} 
+                                    isSelected={false} 
+                                    originalPrice={originalPrice ? Number(originalPrice) : undefined} 
+                                    onClick={() => addToCart(prod)} 
+                                  />
+                                )
+                            })}
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 content-start">
-                            {paginatedList.map((prod) => (
-                                <BulkProductCard key={prod.id} name={prod.name || ""} pricePerKg={prod.price || 0} stock={prod.stock || 0} minStock={prod.minStock} status={prod.status} photo={prod.photo} isSelected={false} onClick={() => addToCart(prod)} />
-                            ))}
+                            {paginatedList.map((prod) => {
+                                const originalPrice = prod.category === "Ofertas" ? safeProducts.find(p => p.name === prod.name && p.category !== "Ofertas")?.price : undefined;
+                                return (
+                                  <BulkProductCard 
+                                    key={prod.id} 
+                                    category={prod.category} 
+                                    name={prod.name || ""} 
+                                    pricePerKg={Number(prod.price) || 0} 
+                                    stock={Number(prod.stock) || 0} 
+                                    minStock={prod.minStock} 
+                                    status={prod.status} 
+                                    photo={prod.photo} 
+                                    isSelected={false} 
+                                    originalPrice={originalPrice ? Number(originalPrice) : undefined} 
+                                    onClick={() => addToCart(prod)} 
+                                  />
+                                )
+                            })}
                         </div>
                     )}
                 </div>
@@ -269,7 +303,7 @@ export function Sells() {
                                     <p className="font-bold text-xs lg:text-sm text-gray-900 leading-tight truncate">{item.product.name}</p>
                                     <span className="text-[8px] lg:text-[9px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full uppercase font-bold tracking-wider">{isPieza ? 'PZA' : 'KG'}</span>
                                 </div>
-                                <p className="text-[9px] lg:text-[10px] font-bold text-gray-400">P. Unit: ${(item.product.price || 0).toFixed(2)}</p>
+                                <p className="text-[9px] lg:text-[10px] font-bold text-gray-400">P. Unit: ${(Number(item.product.price) || 0).toFixed(2)}</p>
                             </div>
                             <button onClick={() => removeFromCart(item.product.id)} className="absolute top-1 right-1 lg:top-2 lg:right-2 w-5 h-5 lg:w-6 lg:h-6 flex items-center justify-center rounded-full bg-red-100 text-red-500 hover:bg-red-500 hover:text-white transition-colors cursor-pointer text-xs">✕</button>
                         </div>

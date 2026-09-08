@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ProductCard } from "../../components/ProductCard";
 import { BulkProductCard } from "../../components/BulkProductCard";
-import { ProductFormModal, RestockModal, DeactivateModal } from "../../components/InventoryModals";
-import { fetchProducts, restockProduct, deactivateProduct, activateProduct, discardStock, uploadPhoto, editProduct, createProduct, type Product } from "../../services/productService";
+import { ProductFormModal, RestockModal, DeactivateModal, OfferModal } from "../../components/InventoryModals";
+import { fetchProducts, restockProduct, deactivateProduct, activateProduct, discardStock, uploadPhoto, editProduct, createProduct, deleteProductHard, type Product } from "../../services/productService";
 import { useLoading } from "../../components/LoadingContext"; 
 
 export function Inventory() {
@@ -16,23 +16,23 @@ export function Inventory() {
   const [isLoading, setIsLoading] = useState(true); 
   const [activeTab, setActiveTab] = useState<'regular' | 'bulk'>('regular');
   const [toast, setToast] = useState<{ msg: string, type: 'success' | 'cancel' | 'delete' | 'error' } | null>(null);
+  const [errorModal, setErrorModal] = useState<{ isOpen: boolean; title: string; details: string }>({ isOpen: false, title: "", details: "" });
 
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("Todas las Categorías");
   const [stockFilter, setStockFilter] = useState("Niveles de Stock");
   const [sortOrder, setSortOrder] = useState("Ordenar: A-Z");
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [modalState, setModalState] = useState<'none' | 'edit' | 'create' | 'restock' | 'deactivate'>('none');
+  const [modalState, setModalState] = useState<'none' | 'edit' | 'create' | 'restock' | 'deactivate' | 'offer'>('none');
 
-  // Estados de paginación independientes
   const [currentRegularPage, setCurrentRegularPage] = useState(1);
   const [currentBulkPage, setCurrentBulkPage] = useState(1);
   const itemsPerPage = 40; 
 
-  // Reiniciar ambas páginas al cambiar los filtros
   useEffect(() => {
       setCurrentRegularPage(1); 
       setCurrentBulkPage(1);
+      setSelectedId(null);
   }, [searchTerm, categoryFilter, stockFilter, sortOrder, activeTab]);
 
   const showToast = (msg: string, type: 'success' | 'cancel' | 'delete' | 'error') => {
@@ -42,8 +42,13 @@ export function Inventory() {
 
   const loadData = async () => {
     setIsLoading(true);
-    try { setProducts(await fetchProducts()); } 
-    catch (error) { showToast("Error al cargar datos", "error"); } 
+    try { 
+      const data = await fetchProducts();
+      setProducts(Array.isArray(data) ? data : []); 
+    } 
+    catch (error: any) { 
+      setErrorModal({ isOpen: true, title: "Error al cargar inventario", details: typeof error === 'string' ? error : JSON.stringify(error) }); 
+    } 
     finally { setIsLoading(false); }
   };
 
@@ -53,18 +58,25 @@ export function Inventory() {
     loadData();
   }, []);
 
+  const safeProducts = useMemo(() => Array.isArray(products) ? products : [], [products]);
+
   const uniqueCategories = useMemo(() => {
-    const sortedCats = Array.from(new Set(products.map(p => p.category))).sort();
+    const sortedCats = Array.from(new Set(safeProducts.map(p => p.category || "Sin Categoría"))).sort();
     return ["Todas las Categorías", ...sortedCats];
-  }, [products]);
+  }, [safeProducts]);
   
-  const formCategories = uniqueCategories.filter(c => c !== "Todas las Categorías");
+  const formCategories = uniqueCategories.filter(c => c !== "Todas las Categorías" && c !== "Ofertas");
+  if (!formCategories.includes("Ofertas")) formCategories.push("Ofertas");
 
   const filteredProducts = useMemo(() => {
-    let result = products;
+    let result = safeProducts;
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
-      result = result.filter(p => p.name.toLowerCase().includes(lower) || (p.barcode && p.barcode.toString().includes(lower)) || p.category.toLowerCase().includes(lower));
+      result = result.filter(p => 
+        (p.name && p.name.toLowerCase().includes(lower)) || 
+        (p.barcode && p.barcode.toString().includes(lower)) || 
+        (p.category && p.category.toLowerCase().includes(lower))
+      );
     }
     
     if (stockFilter === "Inactivos (Bajas)") {
@@ -72,26 +84,31 @@ export function Inventory() {
     } else {
         result = result.filter(p => p.status !== 0);
         if (stockFilter === "Bajo Stock") {
-            result = result.filter(p => p.stock <= 0 || (p.minStock !== null && p.stock <= p.minStock));
+            result = result.filter(p => Number(p.stock) <= 0 || (p.minStock !== null && Number(p.stock) <= Number(p.minStock)));
         } else if (stockFilter === "En Abundancia") {
-            result = result.filter(p => p.stock > 0 && (p.minStock === null || p.stock > p.minStock));
+            result = result.filter(p => Number(p.stock) > 0 && (p.minStock === null || Number(p.stock) > Number(p.minStock)));
         }
     }
 
     if (categoryFilter !== "Todas las Categorías") result = result.filter(p => p.category === categoryFilter);
     
-    if (sortOrder === "Ordenar: A-Z") result.sort((a, b) => a.name.localeCompare(b.name));
-    else if (sortOrder === "Ordenar: Z-A") result.sort((a, b) => b.name.localeCompare(a.name));
-    else if (sortOrder === "Menor Precio") result.sort((a, b) => a.price - b.price);
+    if (sortOrder === "Ordenar: A-Z") result.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    else if (sortOrder === "Ordenar: Z-A") result.sort((a, b) => (b.name || "").localeCompare(a.name || ""));
+    else if (sortOrder === "Menor Precio") result.sort((a, b) => Number(a.price) - Number(b.price));
     
     return result;
-  }, [products, searchTerm, categoryFilter, stockFilter, sortOrder]);
+  }, [safeProducts, searchTerm, categoryFilter, stockFilter, sortOrder]);
 
-  const regularProducts = filteredProducts.filter(p => p.barcode !== null);
-  const bulkProducts = filteredProducts.filter(p => p.barcode === null);
-  const selectedProduct = products.find(p => p.id === selectedId) || null;
+  const regularProducts = filteredProducts.filter(p => p.barcode !== null && p.barcode !== undefined);
+  const bulkProducts = filteredProducts.filter(p => p.barcode === null || p.barcode === undefined);
+  
+  const rawSelectedProduct = safeProducts.find(p => p.id === selectedId) || null;
+  const selectedProduct = rawSelectedProduct ? {
+    ...rawSelectedProduct,
+    price: Number(rawSelectedProduct.price) || 0,
+    stock: Number(rawSelectedProduct.stock) || 0
+  } : null;
 
-  // Cálculos independientes por lista
   const totalRegularPages = Math.max(1, Math.ceil(regularProducts.length / itemsPerPage));
   const totalBulkPages = Math.max(1, Math.ceil(bulkProducts.length / itemsPerPage));
   
@@ -103,11 +120,48 @@ export function Inventory() {
     setLoading(true); 
     try {
       await restockProduct(selectedId, qty);
-      showToast("Se sumaron existencias correctamente", "success");
+      showToast("Se sumaron existencias", "success");
       setModalState('none');
       await loadData();
-    } catch { showToast("Error al surtir inventario", "error"); }
+    } catch (error: any) { 
+      setErrorModal({ isOpen: true, title: "Error al surtir", details: String(error) }); 
+    }
     finally { setLoading(false); } 
+  };
+
+  const executeOffer = async (qty: number, newPrice: number) => {
+    if (!selectedId || !selectedProduct) return;
+    setLoading(true);
+    try {
+      await discardStock(selectedId, qty);
+      const existingOffer = safeProducts.find(p => p.name === selectedProduct.name && p.category === "Ofertas" && p.status === 0);
+
+      if (existingOffer) {
+        await editProduct(existingOffer.id, existingOffer.name, newPrice, existingOffer.barcode, "Ofertas", existingOffer.sellformat, existingOffer.minStock, existingOffer.maxStock);
+        await restockProduct(existingOffer.id, qty);
+        await activateProduct(existingOffer.id);
+        if (selectedProduct.photo && !existingOffer.photo) {
+           await uploadPhoto(existingOffer.id, selectedProduct.photo);
+        }
+      } else {
+        const newCode = selectedProduct.sellformat === "Pieza" ? selectedProduct.barcode : null;
+        const newId = await createProduct(selectedProduct.name, newPrice, "Ofertas", newCode, selectedProduct.sellformat, qty, null, null);
+        if (selectedProduct.photo) {
+           await uploadPhoto(newId, selectedProduct.photo);
+        }
+      }
+
+      if (selectedProduct.stock - qty <= 0) {
+        await deactivateProduct(selectedId);
+      }
+
+      showToast("Oferta generada", "success");
+      setModalState('none');
+      await loadData();
+    } catch (error: any) { 
+      setErrorModal({ isOpen: true, title: "Error al generar oferta", details: String(error) }); 
+    }
+    finally { setLoading(false); }
   };
 
   const executeActivate = async () => {
@@ -118,7 +172,25 @@ export function Inventory() {
       setSelectedId(null);
       showToast("Producto reactivado exitosamente", "success");
       await loadData();
-    } catch { showToast("Error al dar de alta", "error"); }
+    } catch (error: any) { 
+      setErrorModal({ isOpen: true, title: "Error al activar", details: String(error) }); 
+    }
+    finally { setLoading(false); }
+  };
+
+  const executeHardDelete = async () => {
+    if (!selectedId) return;
+    if (!window.confirm("¿Estás seguro de eliminar este producto definitivamente de la base de datos?")) return;
+    
+    setLoading(true);
+    try {
+      await deleteProductHard(selectedId);
+      setSelectedId(null);
+      showToast("Producto borrado definitivamente", "delete");
+      await loadData();
+    } catch (error: any) { 
+      setErrorModal({ isOpen: true, title: "Fallo al borrar definitivamente", details: String(error) }); 
+    }
     finally { setLoading(false); }
   };
 
@@ -150,25 +222,32 @@ export function Inventory() {
       }
       setModalState('none');
       await loadData();
-    } catch { showToast("Error en el servidor", "error"); }
+    } catch (error: any) { 
+      setErrorModal({ isOpen: true, title: "Error al guardar el formulario", details: String(error) }); 
+    }
     finally { setLoading(false); }
   };
 
   const executeDeactivate = async (mode: 'full' | 'partial', qty?: number) => {
-    if (!selectedId) return;
+    if (!selectedId || !selectedProduct) return;
     setLoading(true);
     try {
       if (mode === 'full') {
         await deactivateProduct(selectedId);
         setSelectedId(null);
-        showToast("Producto eliminado del inventario", "delete");
+        showToast("Producto inhabilitado", "cancel");
       } else if (qty && qty > 0) {
         await discardStock(selectedId, qty);
-        showToast("Merma registrada correctamente", "success");
+        if (selectedProduct.stock - qty <= 0) {
+           await deactivateProduct(selectedId);
+        }
+        showToast("Merma registrada", "success");
       }
       setModalState('none');
       await loadData();
-    } catch { showToast("Error procesando solicitud", "error"); }
+    } catch (error: any) { 
+      setErrorModal({ isOpen: true, title: "Error en la operación de baja", details: String(error) }); 
+    }
     finally { setLoading(false); }
   };
 
@@ -177,34 +256,20 @@ export function Inventory() {
     showToast("Acción cancelada", "cancel");
   };
 
-  // Función genérica para renderizar paginación con estilos actualizados
-  const renderPagination = (
-    currentPage: number, 
-    totalPages: number, 
-    setPage: React.Dispatch<React.SetStateAction<number>>, 
-    totalItems: number
-  ) => {
+  const renderPagination = (currentPage: number, totalPages: number, setPage: React.Dispatch<React.SetStateAction<number>>, totalItems: number) => {
     if (totalItems === 0) return null;
     const start = (currentPage - 1) * itemsPerPage + 1;
     const end = Math.min(currentPage * itemsPerPage, totalItems);
 
     return (
       <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-200 shrink-0 gap-2">
-        <button 
-          disabled={currentPage === 1} 
-          onClick={() => setPage(p => p - 1)} 
-          className="px-3 py-2 sm:px-4 bg-white border border-gray-200 rounded-lg text-xs font-bold disabled:opacity-50 text-gray-700 hover:ring-2 hover:ring-primary hover:border-transparent cursor-pointer transition-all shadow-sm"
-        >
+        <button disabled={currentPage === 1} onClick={() => setPage(p => p - 1)} className="px-3 py-2 sm:px-4 bg-white border border-gray-200 rounded-lg text-xs font-bold disabled:opacity-50 text-gray-700 hover:ring-2 hover:ring-primary hover:border-transparent cursor-pointer transition-all shadow-sm">
           <span className="hidden sm:inline">Anterior</span><span className="sm:hidden">◀</span>
         </button>
         <span className="text-[10px] sm:text-xs font-bold text-gray-500 text-center">
           Mostrando {start} - {end} de {totalItems}
         </span>
-        <button 
-          disabled={currentPage === totalPages} 
-          onClick={() => setPage(p => p + 1)} 
-          className="px-3 py-2 sm:px-4 bg-white border border-gray-200 rounded-lg text-xs font-bold disabled:opacity-50 text-gray-700 hover:ring-2 hover:ring-primary hover:border-transparent cursor-pointer transition-all shadow-sm"
-        >
+        <button disabled={currentPage === totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-2 sm:px-4 bg-white border border-gray-200 rounded-lg text-xs font-bold disabled:opacity-50 text-gray-700 hover:ring-2 hover:ring-primary hover:border-transparent cursor-pointer transition-all shadow-sm">
           <span className="hidden sm:inline">Siguiente</span><span className="sm:hidden">▶</span>
         </button>
       </div>
@@ -223,7 +288,24 @@ export function Inventory() {
             <h1 className="text-lg sm:text-xl font-extrabold text-gray-900 leading-none">Control de Inventario</h1>
           </div>
         </div>
-        {isAdmin && <button onClick={() => setModalState('create')} className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white shadow-sm hover:brightness-90 transition-all cursor-pointer">NUEVO PRODUCTO</button>}
+        
+        {isAdmin && stockFilter === "Inactivos (Bajas)" ? (
+          <button 
+            onClick={executeHardDelete} 
+            disabled={!selectedId}
+            className={`rounded-lg px-4 py-2 text-xs font-bold text-white shadow-sm transition-all ${selectedId ? 'bg-red-600 hover:brightness-90 cursor-pointer' : 'bg-red-300 cursor-not-allowed'}`}
+          >
+            ELIMINAR DEFINITIVO
+          </button>
+        ) : isAdmin ? (
+          <button 
+            onClick={() => setModalState('create')} 
+            className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white shadow-sm hover:brightness-90 transition-all cursor-pointer"
+          >
+            NUEVO PRODUCTO
+          </button>
+        ) : null}
+
       </header>
 
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 rounded-xl bg-white border border-gray-200 p-3 shadow-sm shrink-0">
@@ -248,13 +330,15 @@ export function Inventory() {
           </select>
         </div>
         <div className="hidden lg:block w-px h-8 bg-gray-200 mx-1" />
-        <div className={`grid ${selectedProduct?.status === 0 ? "grid-cols-1" : "grid-cols-3"} gap-2 w-full lg:w-auto transition-opacity duration-300 ${selectedProduct ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
+        
+        <div className={`grid ${selectedProduct?.status === 0 ? "grid-cols-1" : "grid-cols-2 lg:grid-cols-4"} gap-2 w-full lg:w-auto transition-opacity duration-300 ${selectedProduct ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
           {selectedProduct?.status === 0 ? (
             <button onClick={executeActivate} className="w-full rounded-lg bg-green-100 hover:bg-green-500 hover:text-white py-2 px-6 text-xs font-bold text-green-700 shadow-sm cursor-pointer transition-colors">⬆️ Dar de Alta</button>
           ) : (
             <>
               <button onClick={() => setModalState('restock')} className="w-full rounded-lg bg-primary/10 hover:bg-primary hover:text-white py-2 text-xs font-bold text-primary shadow-sm cursor-pointer">+ Surtir</button>
-              <button disabled={!isAdmin} onClick={() => setModalState('edit')} className={`w-full rounded-lg py-2 text-xs font-bold shadow-sm ${isAdmin ? "bg-white border border-orange-200 text-orange-600 hover:ring-2 hover:ring-orange-400 cursor-pointer transition-all" : "bg-gray-100 text-gray-400"}`}>✏️ Editar</button>
+              <button disabled={!isAdmin} onClick={() => setModalState('offer')} className={`w-full rounded-lg py-2 text-xs font-bold shadow-sm ${isAdmin ? "bg-white border border-orange-200 text-orange-600 hover:ring-2 hover:ring-orange-400 cursor-pointer transition-all" : "bg-gray-100 text-gray-400"}`}>🏷️ Ofertar</button>
+              <button disabled={!isAdmin} onClick={() => setModalState('edit')} className={`w-full rounded-lg py-2 text-xs font-bold shadow-sm ${isAdmin ? "bg-white border border-gray-300 text-gray-700 hover:ring-2 hover:ring-gray-400 cursor-pointer transition-all" : "bg-gray-100 text-gray-400"}`}>✏️ Editar</button>
               <button disabled={!isAdmin} onClick={() => setModalState('deactivate')} className={`w-full rounded-lg py-2 text-xs font-bold shadow-sm ${isAdmin ? "bg-white border border-red-200 text-red-600 hover:ring-2 hover:ring-red-400 cursor-pointer transition-all" : "bg-gray-100 text-gray-400"}`}>🗑️ Baja</button>
             </>
           )}
@@ -274,11 +358,23 @@ export function Inventory() {
           </h2>
           <div className="overflow-y-auto pr-1 space-y-2 flex-1 custom-scrollbar">
             {isLoading ? <div className="p-4 text-center font-bold text-gray-500">Cargando...</div> : 
-              paginatedRegular.map((prod) => ( 
-                <ProductCard key={prod.id} {...prod} code={prod.barcode?.toString() || "S/N"} isSelected={selectedId === prod.id} onClick={() => setSelectedId(selectedId === prod.id ? null : prod.id)} />
-              ))}
+              paginatedRegular.map((prod) => {
+                const originalPrice = prod.category === "Ofertas" ? safeProducts.find(p => p.name === prod.name && p.category !== "Ofertas")?.price : undefined;
+                return (
+                  <ProductCard 
+                    key={prod.id} 
+                    {...prod} 
+                    price={Number(prod.price) || 0}
+                    stock={Number(prod.stock) || 0}
+                    code={prod.barcode?.toString() || "S/N"} 
+                    isSelected={selectedId === prod.id} 
+                    originalPrice={originalPrice ? Number(originalPrice) : undefined} 
+                    onClick={() => setSelectedId(selectedId === prod.id ? null : prod.id)} 
+                  />
+                )
+              })}
           </div>
-          {totalRegularPages > 1 && renderPagination(currentRegularPage, totalRegularPages, setCurrentRegularPage, regularProducts.length)}
+          {totalRegularPages > 1 && activeTab === 'regular' && renderPagination(currentRegularPage, totalRegularPages, setCurrentRegularPage, regularProducts.length)}
         </section>
 
         <section className={`flex-col lg:w-[45%] xl:w-[40%] rounded-2xl bg-gray-100/50 border border-gray-200 p-4 overflow-hidden ${activeTab === 'bulk' ? 'flex' : 'hidden lg:flex'}`}>
@@ -288,11 +384,26 @@ export function Inventory() {
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 overflow-y-auto pr-1 flex-1 custom-scrollbar content-start">
             {isLoading ? <div className="col-span-full p-4 text-center font-bold text-gray-500">Cargando...</div> :
-              paginatedBulk.map((prod) => ( 
-                <BulkProductCard key={prod.id} name={prod.name} pricePerKg={prod.price} stock={prod.stock} minStock={prod.minStock} status={prod.status} photo={prod.photo} isSelected={selectedId === prod.id} onClick={() => setSelectedId(selectedId === prod.id ? null : prod.id)} />
-              ))}
+              paginatedBulk.map((prod) => {
+                const originalPrice = prod.category === "Ofertas" ? safeProducts.find(p => p.name === prod.name && p.category !== "Ofertas")?.price : undefined;
+                return (
+                  <BulkProductCard 
+                    key={prod.id} 
+                    category={prod.category} 
+                    name={prod.name || ""} 
+                    pricePerKg={Number(prod.price) || 0} 
+                    stock={Number(prod.stock) || 0} 
+                    minStock={prod.minStock} 
+                    status={prod.status} 
+                    photo={prod.photo} 
+                    isSelected={selectedId === prod.id} 
+                    originalPrice={originalPrice ? Number(originalPrice) : undefined} 
+                    onClick={() => setSelectedId(selectedId === prod.id ? null : prod.id)} 
+                  />
+                )
+              })}
           </div>
-          {totalBulkPages > 1 && renderPagination(currentBulkPage, totalBulkPages, setCurrentBulkPage, bulkProducts.length)}
+          {totalBulkPages > 1 && activeTab === 'bulk' && renderPagination(currentBulkPage, totalBulkPages, setCurrentBulkPage, bulkProducts.length)}
         </section>
       </div>
 
@@ -305,9 +416,30 @@ export function Inventory() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {(modalState === 'edit' || modalState === 'create') && <ProductFormModal isOpen={true} product={modalState === 'edit' ? selectedProduct : null} categories={formCategories} onClose={closeModals} onSave={executeFormSave} />}
+        {(modalState === 'edit' || modalState === 'create') && <ProductFormModal isOpen={true} product={selectedProduct} categories={formCategories} onClose={closeModals} onSave={executeFormSave} />}
         {modalState === 'restock' && <RestockModal isOpen={true} product={selectedProduct} onClose={closeModals} onConfirm={executeRestock} />}
         {modalState === 'deactivate' && <DeactivateModal isOpen={true} product={selectedProduct} onClose={closeModals} onConfirm={executeDeactivate} />}
+        {modalState === 'offer' && <OfferModal isOpen={true} product={selectedProduct} onClose={closeModals} onConfirm={executeOffer} />}
+      </AnimatePresence>
+
+      {/* MODAL PARA MOSTRAR ERRORES DEL BACKEND */}
+      <AnimatePresence>
+        {errorModal.isOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg flex flex-col gap-4 border border-gray-100">
+              <div className="flex items-center gap-3 text-red-500 border-b border-gray-100 pb-3">
+                <span className="text-3xl">⚠️</span>
+                <h3 className="text-xl font-extrabold text-gray-900">{errorModal.title}</h3>
+              </div>
+              <div className="bg-red-50/50 p-4 rounded-xl border border-red-100 max-h-64 overflow-y-auto custom-scrollbar">
+                <pre className="text-xs text-red-800 whitespace-pre-wrap font-mono break-words">{errorModal.details}</pre>
+              </div>
+              <div className="flex justify-end pt-2">
+                <button onClick={() => setErrorModal({ isOpen: false, title: "", details: "" })} className="bg-gray-900 text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-gray-800 transition-colors shadow-lg cursor-pointer">Cerrar</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </AnimatePresence>
     </motion.div>
   );

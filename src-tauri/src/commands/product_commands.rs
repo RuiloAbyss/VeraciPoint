@@ -42,3 +42,8 @@ pub async fn create_item(name: String, price: f64, category: String, barcode: Op
 pub async fn activate_item(id: i32, state: tauri::State<'_, crate::DbState>) -> Result<(), String> {
     crate::services::product_service::activate_product(&state.pool, id).await
 }
+
+#[tauri::command]
+pub async fn delete_item_hard(id: i32, state: tauri::State<'_, crate::DbState>) -> Result<(), String> {
+    crate::services::product_service::delete_product_hard(&state.pool, id).await
+}

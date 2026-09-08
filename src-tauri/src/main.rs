@@ -111,6 +111,7 @@ fn main() {
             commands::product_commands::upload_item_photo,
             commands::product_commands::edit_item,
             commands::product_commands::create_item,
+            commands::product_commands::delete_item_hard,
 
             commands::sells_commands::register_new_sale
         ])
