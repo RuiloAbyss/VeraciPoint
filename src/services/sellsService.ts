@@ -62,6 +62,12 @@ export interface SaleFlow {
   total: number;
 }
 
+export interface SaleFlowByDay {
+  date: string;
+  count: number;
+  total: number;
+}
+
 export interface TopProduct {
   name: string;
   quantity: number;
@@ -77,10 +83,20 @@ export async function fetchSalesFlow(startDate: string, endDate: string): Promis
   }));
 }
 
+export async function fetchSalesFlowByDay(startDate: string, endDate: string): Promise<SaleFlowByDay[]> {
+  const raw = await invoke<any[]>("get_sales_flow_by_day", { startDate, endDate });
+  return (raw || []).map(r => ({
+     date: r.date || "",
+     count: Number(r.count) || 0,
+     total: Number(r.total) || 0,
+  }));
+}
+
 export async function fetchTopProducts(startDate: string, endDate: string): Promise<TopProduct[]> {
   const raw = await invoke<any[]>("get_top_products", { startDate, endDate });
   return (raw || []).map(r => ({
      name: r.name || "Desconocido",
+     category: r.category || "Sin Categoría",
      quantity: Number(r.quantity) || 0,
      total: Number(r.total) || 0,
   }));

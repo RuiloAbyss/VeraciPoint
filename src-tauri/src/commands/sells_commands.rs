@@ -33,3 +33,8 @@ pub async fn get_sales_flow(start_date: String, end_date: String, state: tauri::
 pub async fn get_top_products(start_date: String, end_date: String, state: tauri::State<'_, crate::DbState>) -> Result<Vec<serde_json::Value>, String> {
     crate::services::sells_service::fetch_top_products(&state.pool, start_date, end_date).await
 }
+
+#[tauri::command]
+pub async fn get_sales_flow_by_day(start_date: String, end_date: String, state: tauri::State<'_, crate::DbState>) -> Result<Vec<serde_json::Value>, String> {
+    crate::services::sells_service::fetch_sales_flow_by_day(&state.pool, start_date, end_date).await
+}

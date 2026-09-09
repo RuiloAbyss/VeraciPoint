@@ -142,17 +142,50 @@ pub async fn fetch_sales_flow(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>,
     Ok(flow)
 }
 
+pub async fn fetch_sales_flow_by_day(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, start_date: String, end_date: String) -> Result<Vec<serde_json::Value>, String> {
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    
+    // Delegamos la conversión de la fecha a SQL Server usando CONVERT (estilo 120 da formato YYYY-MM-DD)
+    let query = "
+        SELECT 
+            CONVERT(VARCHAR(10), CAST(sellsDate AS DATE), 120) AS saleDate, 
+            COUNT(ventaId) AS salesCount,
+            CAST(SUM(total) AS FLOAT) AS totalAmount
+        FROM sells
+        WHERE CAST(sellsDate AS DATE) >= CAST(@P1 AS DATE)
+          AND CAST(sellsDate AS DATE) <= CAST(@P2 AS DATE)
+        GROUP BY CAST(sellsDate AS DATE)
+        ORDER BY CAST(sellsDate AS DATE) ASC
+    ";
+    
+    let stream = client.query(query, &[&start_date, &end_date]).await.map_err(|e| e.to_string())?;
+    let rows = stream.into_first_result().await.map_err(|e| e.to_string())?;
+    
+    let mut flow = Vec::new();
+    for row in rows {
+        // Extraemos la fecha directamente como string
+        let formatted_date = row.get::<&str, _>("saleDate").unwrap_or("").to_string();
+
+        flow.push(serde_json::json!({
+            "date": formatted_date,
+            "count": row.get::<i32, _>("salesCount").unwrap_or(0),
+            "total": row.get::<f64, _>("totalAmount").unwrap_or(0.0)
+        }));
+    }
+    Ok(flow)
+}
+
 pub async fn fetch_top_products(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, start_date: String, end_date: String) -> Result<Vec<serde_json::Value>, String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
     
-    // Subconsulta aislada para garantizar que los productos estancados en 0 funcionen 
-    // y que no se traiga volumen de otras semanas/meses.
     let query = "
         SELECT 
             p.name AS productName,
+            ISNULL(c.name, 'Sin Categoría') AS categoryName,
             CAST(ISNULL(SUM(v.quantity), 0) AS FLOAT) AS totalQuantity,
             CAST(ISNULL(SUM(v.subtotal), 0) AS FLOAT) AS totalRevenue
         FROM product p
+        LEFT JOIN category c ON p.categoryId = c.categoryId
         LEFT JOIN (
             SELECT sd.productName, sd.quantity, sd.subtotal 
             FROM sells_detail sd
@@ -161,7 +194,7 @@ pub async fn fetch_top_products(pool: &bb8::Pool<bb8_tiberius::ConnectionManager
               AND CAST(s.sellsDate AS DATE) <= CAST(@P2 AS DATE)
         ) v ON p.name = v.productName
         WHERE p.status = 1
-        GROUP BY p.name
+        GROUP BY p.name, c.name
     ";
     
     let stream = client.query(query, &[&start_date, &end_date]).await.map_err(|e| e.to_string())?;
@@ -171,6 +204,7 @@ pub async fn fetch_top_products(pool: &bb8::Pool<bb8_tiberius::ConnectionManager
     for row in rows {
         top.push(serde_json::json!({
             "name": row.get::<&str, _>("productName").unwrap_or("Desconocido"),
+            "category": row.get::<&str, _>("categoryName").unwrap_or("Sin Categoría"),
             "quantity": row.get::<f64, _>("totalQuantity").unwrap_or(0.0),
             "total": row.get::<f64, _>("totalRevenue").unwrap_or(0.0)
         }));
