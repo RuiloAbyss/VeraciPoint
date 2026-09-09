@@ -113,7 +113,10 @@ fn main() {
             commands::product_commands::create_item,
             commands::product_commands::delete_item_hard,
 
-            commands::sells_commands::register_new_sale
+            commands::sells_commands::register_new_sale,
+            commands::sells_commands::get_sales_history,
+            commands::sells_commands::get_sale_details,
+
         ])
         .run(tauri::generate_context!())
         .expect("error running tauri");
