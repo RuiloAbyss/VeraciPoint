@@ -55,3 +55,33 @@ export async function fetchSaleDetails(ventaId: number): Promise<SaleDetail[]> {
     subtotal: Number(d.subtotal) || 0,
   }));
 }
+
+export interface SaleFlow {
+  hour: number;
+  count: number;
+  total: number;
+}
+
+export interface TopProduct {
+  name: string;
+  quantity: number;
+  total: number;
+}
+
+export async function fetchSalesFlow(startDate: string, endDate: string): Promise<SaleFlow[]> {
+  const raw = await invoke<any[]>("get_sales_flow", { startDate, endDate });
+  return (raw || []).map(r => ({
+     hour: Number(r.hour) || 0,
+     count: Number(r.count) || 0,
+     total: Number(r.total) || 0,
+  }));
+}
+
+export async function fetchTopProducts(startDate: string, endDate: string): Promise<TopProduct[]> {
+  const raw = await invoke<any[]>("get_top_products", { startDate, endDate });
+  return (raw || []).map(r => ({
+     name: r.name || "Desconocido",
+     quantity: Number(r.quantity) || 0,
+     total: Number(r.total) || 0,
+  }));
+}

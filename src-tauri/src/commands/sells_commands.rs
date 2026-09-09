@@ -23,3 +23,13 @@ pub async fn get_sales_history(state: State<'_, DbState>) -> Result<Vec<serde_js
 pub async fn get_sale_details(venta_id: i32, state: State<'_, DbState>) -> Result<Vec<serde_json::Value>, String> {
     sells_service::fetch_sale_details(&state.pool, venta_id).await
 }
+
+#[tauri::command]
+pub async fn get_sales_flow(start_date: String, end_date: String, state: tauri::State<'_, crate::DbState>) -> Result<Vec<serde_json::Value>, String> {
+    crate::services::sells_service::fetch_sales_flow(&state.pool, start_date, end_date).await
+}
+
+#[tauri::command]
+pub async fn get_top_products(start_date: String, end_date: String, state: tauri::State<'_, crate::DbState>) -> Result<Vec<serde_json::Value>, String> {
+    crate::services::sells_service::fetch_top_products(&state.pool, start_date, end_date).await
+}

@@ -42,7 +42,6 @@ pub async fn register_sale(
         }
     };
 
-    // Registrar Detalles usando únicamente productName
     for detail in details {
         let q_detail = "
             INSERT INTO sells_detail (ventaId, productName, quantity, subtotal)
@@ -55,7 +54,6 @@ pub async fn register_sale(
     }
 
     client.simple_query("COMMIT TRAN;").await.map_err(|e| e.to_string())?;
-
     Ok(venta_id)
 }
 
@@ -67,7 +65,6 @@ pub async fn delete_product_hard(pool: &bb8::Pool<bb8_tiberius::ConnectionManage
 
 pub async fn fetch_sales(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>) -> Result<Vec<serde_json::Value>, String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
-    
     let query = "
         SELECT 
             s.ventaId, 
@@ -79,10 +76,8 @@ pub async fn fetch_sales(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>) -> R
         INNER JOIN employee e ON s.employeeId = e.employeeId
         ORDER BY s.ventaId DESC
     ";
-    
     let stream = client.simple_query(query).await.map_err(|e| e.to_string())?;
     let rows = stream.into_first_result().await.map_err(|e| e.to_string())?;
-    
     let mut sales = Vec::new();
     for row in rows {
         sales.push(serde_json::json!({
@@ -98,7 +93,6 @@ pub async fn fetch_sales(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>) -> R
 
 pub async fn fetch_sale_details(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, venta_id: i32) -> Result<Vec<serde_json::Value>, String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
-    
     let query = "
         SELECT 
             detailId, 
@@ -108,10 +102,8 @@ pub async fn fetch_sale_details(pool: &bb8::Pool<bb8_tiberius::ConnectionManager
         FROM sells_detail
         WHERE ventaId = @P1
     ";
-    
     let stream = client.query(query, &[&venta_id]).await.map_err(|e| e.to_string())?;
     let rows = stream.into_first_result().await.map_err(|e| e.to_string())?;
-    
     let mut details = Vec::new();
     for row in rows {
         details.push(serde_json::json!({
@@ -122,4 +114,66 @@ pub async fn fetch_sale_details(pool: &bb8::Pool<bb8_tiberius::ConnectionManager
         }));
     }
     Ok(details)
+}
+
+pub async fn fetch_sales_flow(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, start_date: String, end_date: String) -> Result<Vec<serde_json::Value>, String> {
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    let query = "
+        SELECT 
+            DATEPART(HOUR, sellsDate) AS saleHour, 
+            COUNT(ventaId) AS salesCount,
+            CAST(SUM(total) AS FLOAT) AS totalAmount
+        FROM sells
+        WHERE CAST(sellsDate AS DATE) >= CAST(@P1 AS DATE)
+          AND CAST(sellsDate AS DATE) <= CAST(@P2 AS DATE)
+          AND DATEPART(HOUR, sellsDate) BETWEEN 6 AND 21
+        GROUP BY DATEPART(HOUR, sellsDate)
+    ";
+    let stream = client.query(query, &[&start_date, &end_date]).await.map_err(|e| e.to_string())?;
+    let rows = stream.into_first_result().await.map_err(|e| e.to_string())?;
+    let mut flow = Vec::new();
+    for row in rows {
+        flow.push(serde_json::json!({
+            "hour": row.get::<i32, _>("saleHour").unwrap_or(0),
+            "count": row.get::<i32, _>("salesCount").unwrap_or(0),
+            "total": row.get::<f64, _>("totalAmount").unwrap_or(0.0)
+        }));
+    }
+    Ok(flow)
+}
+
+pub async fn fetch_top_products(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, start_date: String, end_date: String) -> Result<Vec<serde_json::Value>, String> {
+    let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    
+    // Subconsulta aislada para garantizar que los productos estancados en 0 funcionen 
+    // y que no se traiga volumen de otras semanas/meses.
+    let query = "
+        SELECT 
+            p.name AS productName,
+            CAST(ISNULL(SUM(v.quantity), 0) AS FLOAT) AS totalQuantity,
+            CAST(ISNULL(SUM(v.subtotal), 0) AS FLOAT) AS totalRevenue
+        FROM product p
+        LEFT JOIN (
+            SELECT sd.productName, sd.quantity, sd.subtotal 
+            FROM sells_detail sd
+            INNER JOIN sells s ON sd.ventaId = s.ventaId
+            WHERE CAST(s.sellsDate AS DATE) >= CAST(@P1 AS DATE) 
+              AND CAST(s.sellsDate AS DATE) <= CAST(@P2 AS DATE)
+        ) v ON p.name = v.productName
+        WHERE p.status = 1
+        GROUP BY p.name
+    ";
+    
+    let stream = client.query(query, &[&start_date, &end_date]).await.map_err(|e| e.to_string())?;
+    let rows = stream.into_first_result().await.map_err(|e| e.to_string())?;
+    
+    let mut top = Vec::new();
+    for row in rows {
+        top.push(serde_json::json!({
+            "name": row.get::<&str, _>("productName").unwrap_or("Desconocido"),
+            "quantity": row.get::<f64, _>("totalQuantity").unwrap_or(0.0),
+            "total": row.get::<f64, _>("totalRevenue").unwrap_or(0.0)
+        }));
+    }
+    Ok(top)
 }

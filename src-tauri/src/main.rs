@@ -116,6 +116,8 @@ fn main() {
             commands::sells_commands::register_new_sale,
             commands::sells_commands::get_sales_history,
             commands::sells_commands::get_sale_details,
+            commands::sells_commands::get_sales_flow,
+            commands::sells_commands::get_top_products,
 
         ])
         .run(tauri::generate_context!())
