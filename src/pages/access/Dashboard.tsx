@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { invoke } from "@tauri-apps/api/core";
 import { ActionCard, type ActionCardProps } from "../../components/ActionCard";
 import { checkActiveTurn, openTurn, closeTurn } from "../../services/turnService";
 
@@ -9,6 +10,7 @@ interface UserSession {
   name: string;
   isAdmin: boolean;
   activeTurnId?: number | null;
+  isManagementMode?: boolean;
 }
 
 const PromoSection = () => (
@@ -34,6 +36,7 @@ export function Dashboard() {
     name: "Cargando...",
     isAdmin: false,
     activeTurnId: null,
+    isManagementMode: false,
   });
 
   const [isTurnModalOpen, setIsTurnModalOpen] = useState(false);
@@ -61,10 +64,12 @@ export function Dashboard() {
             employeeId: empId,
             name: parsed.name || "Usuario",
             isAdmin: Boolean(parsed.isAdmin ?? parsed.is_admin ?? false),
-            activeTurnId: parsed.activeTurnId || null
+            activeTurnId: parsed.activeTurnId || null,
+            isManagementMode: parsed.isManagementMode || false
           });
 
-          if (empId > 0 && !parsed.activeTurnId) {
+          // Solo mostramos el modal si NO hay turno activo Y NO estamos en modo gestión
+          if (empId > 0 && !parsed.activeTurnId && !parsed.isManagementMode) {
             const hasTurn = await checkActiveTurn(empId);
             if (!hasTurn) {
               setIsTurnModalOpen(true);
@@ -89,17 +94,31 @@ export function Dashboard() {
     try {
       const turnId = await openTurn(session.employeeId, Number(startMoney));
       
-      const updatedSession = { ...session, activeTurnId: turnId };
+      try {
+        await invoke("register_clock_in", { empId: session.employeeId });
+      } catch (attError) {
+        console.warn("Asistencia ya registrada o error silencioso", attError);
+      }
+
+      const updatedSession = { ...session, activeTurnId: turnId, isManagementMode: false };
       setSession(updatedSession);
       localStorage.setItem("userSession", JSON.stringify(updatedSession));
       
       setIsTurnModalOpen(false);
-      showToast("Caja abierta exitosamente", "success");
+      showToast("Caja abierta y asistencia registrada", "success");
     } catch (error) {
         showToast("Error al abrir caja", "error");
     } finally {
         setIsProcessing(false);
     }
+  };
+
+  const handleEnterManagementMode = () => {
+    const updatedSession = { ...session, isManagementMode: true };
+    setSession(updatedSession);
+    localStorage.setItem("userSession", JSON.stringify(updatedSession));
+    setIsTurnModalOpen(false);
+    showToast("Modo Gestión Activo", "info");
   };
 
   const handleCloseTurn = async (e: React.FormEvent) => {
@@ -123,6 +142,11 @@ export function Dashboard() {
     }
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem("userSession");
+    navigate("/login");
+  };
+
   const menuActions: (Omit<ActionCardProps, "onClick"> & { route: string; adminOnly?: boolean })[] = [
     { id: "ventas", title: "Realizar Ventas", description: "Cobro ágil en caja", iconBg: "bg-primary/20 text-primary", icon: "🛒", route: "/sells", adminOnly: false },
     { id: "inventario", title: "Control de Inventario", description: "Altas y existencias", iconBg: "bg-secondary/30 text-secondary", icon: "📦", route: "/inventory", adminOnly: false },
@@ -131,6 +155,15 @@ export function Dashboard() {
     { id: "personal", title: "Control de Personal", description: "Horarios y permisos", iconBg: "bg-gray-200 text-gray-700", icon: "👥", route: "/staff", adminOnly: true },
     { id: "reportes", title: "Reportes", description: "Balance general", iconBg: "bg-secondary/30 text-secondary", icon: "📊", route: "/reports", adminOnly: true },
   ];
+
+  const handleNavigation = (route: string, id: string) => {
+    if (id === "ventas" && !session.activeTurnId) {
+      showToast("Requiere abrir caja para realizar ventas", "error");
+      setIsTurnModalOpen(true);
+      return;
+    }
+    navigate(route);
+  };
 
   return (
     <motion.div
@@ -148,8 +181,8 @@ export function Dashboard() {
               <span className="text-xs font-bold tracking-wider text-primary uppercase">
                 Abarrotes Janny
               </span>
-              <span className="rounded-full bg-gray-100 border border-gray-200 px-2 py-0.5 text-[10px] font-extrabold text-gray-500 uppercase">
-                {session.isAdmin ? "Administrador" : "Cajero"}
+              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase ${session.isAdmin ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                {session.isAdmin ? (session.activeTurnId ? "Administrador" : "Modo Gestión") : "Cajero"}
               </span>
             </div>
             <h1 className="text-xl font-extrabold text-gray-900 lg:text-2xl leading-none mt-0.5">
@@ -158,7 +191,7 @@ export function Dashboard() {
           </div>
         </div>
         
-        <div className="flex items-center">
+        <div className="flex items-center gap-3">
           {session.activeTurnId ? (
             <button 
               onClick={() => setIsCloseTurnModalOpen(true)} 
@@ -168,13 +201,21 @@ export function Dashboard() {
               <span>Cerrar Caja</span>
             </button>
           ) : (
-            <button 
-              onClick={() => setIsTurnModalOpen(true)} 
-              className="group flex items-center gap-2 px-4 py-2.5 bg-gray-50 text-gray-500 rounded-xl text-xs font-bold hover:bg-primary hover:text-white transition-all shadow-sm cursor-pointer border border-gray-200 hover:border-primary"
-            >
-              <span className="h-2.5 w-2.5 rounded-full bg-gray-400 group-hover:bg-white shadow-sm transition-colors" />
-              <span>Abrir Caja</span>
-            </button>
+            <>
+              <button 
+                onClick={handleLogout} 
+                className="text-gray-400 hover:text-red-500 font-bold text-xs px-3 py-2 cursor-pointer transition-colors"
+              >
+                Cerrar Sesión
+              </button>
+              <button 
+                onClick={() => setIsTurnModalOpen(true)} 
+                className="group flex items-center gap-2 px-4 py-2.5 bg-gray-50 text-gray-500 rounded-xl text-xs font-bold hover:bg-primary hover:text-white transition-all shadow-sm cursor-pointer border border-gray-200 hover:border-primary"
+              >
+                <span className="h-2.5 w-2.5 rounded-full bg-gray-400 group-hover:bg-white shadow-sm transition-colors" />
+                <span>Abrir Caja</span>
+              </button>
+            </>
           )}
         </div>
       </header>
@@ -188,7 +229,7 @@ export function Dashboard() {
                 <ActionCard
                   key={cardProps.id}
                   {...cardProps}
-                  onClick={() => navigate(route)}
+                  onClick={() => handleNavigation(route, cardProps.id)}
                 />
               ))}
             </div>
@@ -203,28 +244,27 @@ export function Dashboard() {
                   <div key={cardProps.id} className="flex-1 flex">
                     <ActionCard
                       {...cardProps}
-                      onClick={() => navigate(route)}
+                      onClick={() => handleNavigation(route, cardProps.id)}
                     />
                   </div>
                 ))}
               </div>
             </section>
-            
             <PromoSection />
           </div>
         </>
       )}
 
-      {/* Modal Obligatorio Apertura de Caja */}
+      {/* Modal Obligatorio Apertura de Caja / Bypass Gestión */}
       <AnimatePresence>
         {isTurnModalOpen && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
             <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-white rounded-3xl shadow-2xl border border-gray-200 p-8 w-full max-w-sm flex flex-col items-center">
               <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6 border-4 border-white shadow-sm">
                 <span className="text-4xl">💰</span>
               </div>
               <h3 className="text-2xl font-extrabold text-gray-900 mb-2 text-center">Apertura de Caja</h3>
-              <p className="text-sm text-gray-500 mb-6 text-center">Debes declarar el efectivo inicial en caja para iniciar tu turno.</p>
+              <p className="text-sm text-gray-500 mb-6 text-center">Debes declarar el efectivo inicial en caja para iniciar tu turno y registrar tu asistencia.</p>
               
               <form onSubmit={handleOpenTurn} className="w-full space-y-5">
                 <div>
@@ -246,8 +286,18 @@ export function Dashboard() {
                   disabled={isProcessing}
                   className="w-full rounded-2xl bg-primary px-4 py-4 text-sm font-bold text-white hover:brightness-95 transition-all shadow-lg shadow-primary/30 disabled:opacity-50 flex justify-center items-center gap-2 cursor-pointer"
                 >
-                  {isProcessing ? "Procesando..." : "Iniciar Turno"}
+                  {isProcessing ? "Procesando..." : "Iniciar Turno y Asistencia"}
                 </button>
+
+                {session.isAdmin && (
+                  <button 
+                    type="button" 
+                    onClick={handleEnterManagementMode} 
+                    className="w-full mt-2 rounded-2xl bg-gray-100 px-4 py-3 text-xs font-bold text-gray-500 hover:bg-gray-200 transition-colors cursor-pointer"
+                  >
+                    Saltar (Entrar en Modo Gestión)
+                  </button>
+                )}
               </form>
             </motion.div>
           </motion.div>
@@ -257,7 +307,7 @@ export function Dashboard() {
       {/* Modal de Cierre de Caja */}
       <AnimatePresence>
         {isCloseTurnModalOpen && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
             <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-white rounded-3xl shadow-2xl border border-gray-200 p-8 w-full max-w-sm flex flex-col items-center">
               <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mb-6 border-4 border-white shadow-sm">
                 <span className="text-4xl">🔒</span>
@@ -294,10 +344,9 @@ export function Dashboard() {
         )}
       </AnimatePresence>
 
-      {/* Notificaciones (Toast) */}
       <AnimatePresence>
         {toast && (
-          <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[70]">
             <div className={`px-6 py-3 rounded-full shadow-xl font-bold text-sm flex items-center gap-2 ${toast.type === 'success' ? 'bg-green-500 text-white' : toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-gray-800 text-white'}`}>
               {toast.msg}
             </div>

@@ -17,6 +17,7 @@ export function Staff() {
   const { setLoading } = useLoading();
   const [activeTab, setActiveTab] = useState<'employees' | 'shifts'>('employees');
   
+  const [activeEmployeeId, setActiveEmployeeId] = useState<number>(0);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [showInactive, setShowInactive] = useState(false);
@@ -43,7 +44,16 @@ export function Staff() {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { 
+    const raw = localStorage.getItem("userSession");
+    if (raw) {
+        try {
+            const parsed = JSON.parse(raw);
+            setActiveEmployeeId(parsed.employeeId || parsed.employee_id || 0);
+        } catch (e) {}
+    }
+    loadData(); 
+  }, []);
 
   const filteredEmployees = useMemo(() => employees.filter(e => showInactive ? !e.status : e.status), [employees, showInactive]);
 
@@ -61,6 +71,15 @@ export function Staff() {
 
   const handleToggleStatus = async () => {
     if (!deactivateModal) return;
+    
+    // VALIDACIÓN: No auto-baja
+    if (deactivateModal.id === activeEmployeeId && deactivateModal.currentStatus) {
+        setToast({ msg: "Acción Denegada: No puedes darte de baja a ti mismo." });
+        setTimeout(() => setToast(null), 3500);
+        setDeactivateModal(null);
+        return;
+    }
+
     setLoading(true);
     try {
       await toggleEmployee(deactivateModal.id, !deactivateModal.currentStatus);
@@ -75,6 +94,19 @@ export function Staff() {
 
   const handleSaveEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // VALIDACIÓN: No cambiar rol propio
+    const originalEmp = employees.find(emp => emp.id === empModal.data.id);
+    let finalIsAdmin = empModal.data.isAdmin || false;
+    
+    if (empModal.data.id === activeEmployeeId && originalEmp) {
+        if (originalEmp.isAdmin !== empModal.data.isAdmin) {
+            setToast({ msg: "Acción Denegada: No puedes cambiar tu propio cargo." });
+            setTimeout(() => setToast(null), 3500);
+            return;
+        }
+    }
+
     setLoading(true);
     try {
       await saveEmployee({
@@ -83,7 +115,7 @@ export function Staff() {
         lastname: empModal.data.lastname || "",
         user: empModal.data.username || "",
         pass: passwordInput || "",
-        isAdmin: empModal.data.isAdmin || false 
+        isAdmin: finalIsAdmin 
       });
       setEmpModal({ isOpen: false, data: {} });
       setPasswordInput("");
@@ -131,7 +163,6 @@ export function Staff() {
       setLoading(true);
       try {
           await toggleDayOff(sidebar.emp.id, dateStr);
-          // Recargar asistencia
           const today = new Date();
           const start = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
           const end = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
@@ -141,7 +172,6 @@ export function Staff() {
       }
   };
 
-  // --- Algoritmo de Asistencia ---
   const currentMonthDays = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
     const today = new Date();
@@ -152,7 +182,6 @@ export function Staff() {
 
     if (!sidebar.emp) return { days: [], stats: { onTime: 0, late: 0, absent: 0, dayOff: 0 } };
     
-    // Convertir fecha de creación del empleado para evitar faltas históricas
     const empCreatedAt = sidebar.emp.createdAt ? new Date(sidebar.emp.createdAt + "T00:00:00").toISOString().split('T')[0] : "2000-01-01";
     const empShift = shifts.find(s => s.employeeId === sidebar.emp!.id);
 
@@ -164,13 +193,13 @@ export function Staff() {
         const att = attendance.find(a => a.date === dateStr);
         const isScheduled = empShift ? empShift.daysCovered.split(',').includes(dayMap[new Date(y, m, d).getDay()]) : false;
 
-        let status = 'future'; // Gris
+        let status = 'future'; 
         
         if (dateStr < empCreatedAt) {
-            status = 'inactive'; // Días antes de que el empleado fuera contratado
+            status = 'inactive'; 
         }
         else if (att?.isDayOff) {
-            status = 'dayoff'; // Azul
+            status = 'dayoff'; 
             if (dateStr <= todayStr) dayOffCount++;
         } 
         else if (dateStr > todayStr) {
@@ -181,10 +210,10 @@ export function Staff() {
         }
         else if (!att?.clockIn) {
             if (dateStr < todayStr) {
-                status = 'absent'; // Rojo
+                status = 'absent'; 
                 absent++;
             } else {
-                status = 'future'; // Es hoy, pero aún no llega
+                status = 'future'; 
             }
         }
         else {
@@ -193,10 +222,10 @@ export function Staff() {
             const diffMins = (cH * 60 + cM) - (sH * 60 + sM);
 
             if (diffMins <= 15) {
-                status = 'ontime'; // Verde
+                status = 'ontime'; 
                 onTime++;
             } else {
-                status = 'late'; // Amarillo
+                status = 'late'; 
                 late++;
             }
         }
@@ -206,6 +235,8 @@ export function Staff() {
 
     return { days, stats: { onTime, late, absent, dayOff: dayOffCount } };
   }, [sidebar.emp, attendance, shifts]);
+
+  const isEditingSelf = empModal.data.id === activeEmployeeId;
 
   return (
     <motion.div className="absolute inset-0 flex flex-col p-2 sm:p-4 lg:p-5 gap-3 text-gray-900 z-20 bg-gray-50/50 backdrop-blur-sm" initial={{ y: "100%" }} animate={{ y: "0%" }} exit={{ y: "100%" }} transition={{ duration: 0.28 }}>
@@ -252,7 +283,10 @@ export function Staff() {
                 {filteredEmployees.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-gray-400 font-bold">No hay registros.</td></tr>}
                 {filteredEmployees.map(e => (
                   <tr key={e.id} className="hover:bg-white transition-colors group">
-                    <td className="p-4 font-extrabold text-gray-900">{e.name} {e.lastname}</td>
+                    <td className="p-4 font-extrabold text-gray-900 flex items-center gap-2">
+                        {e.name} {e.lastname} 
+                        {e.id === activeEmployeeId && <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-md uppercase font-bold tracking-widest">Tú</span>}
+                    </td>
                     <td className="p-4 text-gray-500 font-medium">@{e.username}</td>
                     <td className="p-4">
                         <span className={`px-2.5 py-1 rounded-md text-[10px] font-extrabold border tracking-wider ${e.isAdmin ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
@@ -263,7 +297,17 @@ export function Staff() {
                       <button onClick={() => setSidebar({isOpen: true, emp: e})} className="text-gray-500 font-bold hover:text-primary transition-colors cursor-pointer bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 text-xs">Revisar Asistencia</button>
                       <div className="w-px h-4 bg-gray-200" />
                       <button onClick={() => setEmpModal({ isOpen: true, data: e })} className="text-blue-500 font-bold hover:underline cursor-pointer">Editar</button>
-                      <button onClick={() => setDeactivateModal({ isOpen: true, id: e.id, currentStatus: e.status, name: e.name })} className={`${e.status ? 'text-red-500' : 'text-green-600'} font-bold hover:underline cursor-pointer`}>
+                      <button 
+                        onClick={() => {
+                            if (e.id === activeEmployeeId && e.status) {
+                                setToast({ msg: "No puedes darte de baja a ti mismo." });
+                                setTimeout(() => setToast(null), 3000);
+                                return;
+                            }
+                            setDeactivateModal({ isOpen: true, id: e.id, currentStatus: e.status, name: e.name });
+                        }} 
+                        className={`${e.status ? 'text-red-500' : 'text-green-600'} font-bold hover:underline cursor-pointer ${e.id === activeEmployeeId && e.status ? 'opacity-40 cursor-not-allowed hover:no-underline' : ''}`}
+                      >
                         {e.status ? 'Dar de Baja' : 'Reactivar'}
                       </button>
                     </td>
@@ -317,8 +361,6 @@ export function Staff() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-5 space-y-6">
-                
-                {/* Resumen */}
                 <div className="grid grid-cols-4 gap-2 bg-gray-50 p-3 rounded-2xl border border-gray-100 text-center shrink-0">
                     <div className="flex flex-col"><span className="text-xl font-extrabold text-green-600">{currentMonthDays.stats.onTime}</span><span className="text-[9px] font-bold text-gray-500 uppercase">A Tiempo</span></div>
                     <div className="flex flex-col border-l border-gray-200"><span className="text-xl font-extrabold text-yellow-500">{currentMonthDays.stats.late}</span><span className="text-[9px] font-bold text-gray-500 uppercase">Retardo</span></div>
@@ -330,7 +372,6 @@ export function Staff() {
                     💡 Selecciona cualquier día en el calendario para alternar el estatus de "Día Libre".
                 </div>
 
-                {/* Calendario Interactivo Flujo */}
                 <div>
                     <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Historial e Interacción</h3>
                     <div className="grid grid-cols-7 gap-2">
@@ -363,7 +404,7 @@ export function Staff() {
         )}
       </AnimatePresence>
 
-      {/* MODALES SECUNDARIOS */}
+      {/* MODAL EMPLEADO */}
       <AnimatePresence>
         {empModal.isOpen && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -377,10 +418,17 @@ export function Staff() {
                     <div><label className="text-xs font-bold text-gray-500 uppercase">Usuario (Login)</label><input required type="text" value={empModal.data.username || ''} onChange={e => setEmpModal(p => ({...p, data: {...p.data, username: e.target.value}}))} className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary font-bold" /></div>
                     <div><label className="text-xs font-bold text-gray-500 uppercase">Contraseña {empModal.data.id && '(Opcional)'}</label><input required={!empModal.data.id} type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary font-bold" /></div>
                     <div>
-                        <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Rol en el Sistema</label>
+                        <label className="text-xs font-bold text-gray-500 uppercase mb-2 block flex items-center justify-between">
+                            Rol en el Sistema
+                            {isEditingSelf && <span className="text-[9px] text-orange-500 bg-orange-50 px-2 py-0.5 rounded uppercase">No modificable</span>}
+                        </label>
                         <div className="flex gap-2">
-                            <label className={`flex-1 py-2 text-center rounded-lg text-xs font-bold border-2 cursor-pointer transition-colors ${!empModal.data.isAdmin ? 'border-primary bg-primary/10 text-primary' : 'border-gray-200 text-gray-500'}`}><input type="radio" className="hidden" checked={!empModal.data.isAdmin} onChange={() => setEmpModal(p => ({...p, data: {...p.data, isAdmin: false}}))} /> Cajero</label>
-                            <label className={`flex-1 py-2 text-center rounded-lg text-xs font-bold border-2 cursor-pointer transition-colors ${empModal.data.isAdmin ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-500'}`}><input type="radio" className="hidden" checked={empModal.data.isAdmin} onChange={() => setEmpModal(p => ({...p, data: {...p.data, isAdmin: true}}))} /> Administrador</label>
+                            <label className={`flex-1 py-2 text-center rounded-lg text-xs font-bold border-2 transition-colors ${!empModal.data.isAdmin ? 'border-primary bg-primary/10 text-primary' : 'border-gray-200 text-gray-500'} ${isEditingSelf ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                                <input type="radio" disabled={isEditingSelf} className="hidden" checked={!empModal.data.isAdmin} onChange={() => setEmpModal(p => ({...p, data: {...p.data, isAdmin: false}}))} /> Cajero
+                            </label>
+                            <label className={`flex-1 py-2 text-center rounded-lg text-xs font-bold border-2 transition-colors ${empModal.data.isAdmin ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-500'} ${isEditingSelf ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                                <input type="radio" disabled={isEditingSelf} className="hidden" checked={empModal.data.isAdmin} onChange={() => setEmpModal(p => ({...p, data: {...p.data, isAdmin: true}}))} /> Administrador
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -392,6 +440,7 @@ export function Staff() {
           </div>
         )}
 
+        {/* MODAL TURNO */}
         {shiftModal.isOpen && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
             <motion.form initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} onSubmit={handleSaveShift} className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-md border border-gray-100">
@@ -426,6 +475,7 @@ export function Staff() {
           </div>
         )}
 
+        {/* Modal de Confirmación de Baja */}
         {deactivateModal && (
             <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
                 <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-sm border border-gray-100 text-center">
