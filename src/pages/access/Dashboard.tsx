@@ -128,7 +128,7 @@ export function Dashboard() {
     { id: "inventario", title: "Control de Inventario", description: "Altas y existencias", iconBg: "bg-secondary/30 text-secondary", icon: "📦", route: "/inventory", adminOnly: false },
     { id: "historial", title: "Historial de Ventas", description: "Tickets previos", iconBg: "bg-tertiary/25 text-tertiary", icon: "📄", route: "/history", adminOnly: true },
     { id: "pedidos", title: "Orden de Pedido", description: "Solicitar mercancía", iconBg: "bg-blue-500/20 text-blue-600", icon: "📋", route: "/orders", adminOnly: false },
-    { id: "personal", title: "Control de Personal", description: "Horarios y permisos", iconBg: "bg-gray-200 text-gray-700", icon: "👥", route: "/employees", adminOnly: true },
+    { id: "personal", title: "Control de Personal", description: "Horarios y permisos", iconBg: "bg-gray-200 text-gray-700", icon: "👥", route: "/staff", adminOnly: true },
     { id: "reportes", title: "Reportes", description: "Balance general", iconBg: "bg-secondary/30 text-secondary", icon: "📊", route: "/reports", adminOnly: true },
   ];
 

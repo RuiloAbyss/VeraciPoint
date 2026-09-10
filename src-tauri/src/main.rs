@@ -120,6 +120,12 @@ fn main() {
             commands::sells_commands::get_top_products,
             commands::sells_commands::get_sales_flow_by_day,
 
+            commands::employee_commands::fetch_employees,
+            commands::employee_commands::save_employee,
+            commands::employee_commands::toggle_employee,
+            commands::employee_commands::fetch_shifts,
+            commands::employee_commands::save_shift,
+
         ])
         .run(tauri::generate_context!())
         .expect("error running tauri");

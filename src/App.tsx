@@ -8,6 +8,7 @@ import { Dashboard } from "./pages/access/Dashboard";
 import { Inventory } from "./pages/action/Inventory";
 import { Sells } from "./pages/action/Sells";
 import { History } from "./pages/action/History";
+import { Staff } from "./pages/action/Staff";
 import { ErrorBoundary } from "./components/ErrorBoundary"; 
 
 const PlaceholderView = ({ title }: { title: string }) => (
@@ -26,15 +27,12 @@ function AnimatedRoutes() {
         <Route path="/login" element={<Login />} />
         <Route path="/dashboard" element={<Dashboard />} />
         
-        {/* Componentes Reales Implementados */}
+        {/* Actions */}
         <Route path="/inventory" element={<Inventory />} />
         <Route path="/sells" element={<Sells />} />
         <Route path="/history" element={<History />} />
-        {/* Módulos en Espera (Placeholders) */}
-        <Route path="/history" element={<PlaceholderView title="Historial de Ventas" />} />
-        <Route path="/orders" element={<PlaceholderView title="Orden de Pedido" />} />
-        <Route path="/employees" element={<PlaceholderView title="Control de Personal" />} />
-        <Route path="/reports" element={<PlaceholderView title="Reportes" />} />
+        <Route path="/staff" element={<Staff />} />
+
       </Routes>
     </AnimatePresence>
   );
