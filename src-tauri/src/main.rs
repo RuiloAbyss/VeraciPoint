@@ -129,6 +129,17 @@ fn main() {
             commands::employee_commands::toggle_day_off,
             commands::employee_commands::register_clock_in,
 
+            commands::order_commands::fetch_orders,
+            commands::order_commands::fetch_order_details,
+            commands::order_commands::register_order,
+            commands::order_commands::update_order_status,
+
+            commands::order_commands::fetch_providers,
+            commands::order_commands::add_provider,
+            commands::order_commands::toggle_provider,
+            commands::order_commands::edit_provider,
+
+
         ])
         .run(tauri::generate_context!())
         .expect("error running tauri");
