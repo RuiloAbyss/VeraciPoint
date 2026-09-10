@@ -2,7 +2,10 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLoading } from "../../components/LoadingContext";
-import { getEmployees, getShifts, saveEmployee, toggleEmployee, saveShift, type Employee, type Shift } from "../../services/employeeService";
+import { 
+  getEmployees, getShifts, saveEmployee, toggleEmployee, saveShift, 
+  getAttendance, toggleDayOff, type Employee, type Shift, type Attendance 
+} from "../../services/employeeService";
 
 const DAYS_OF_WEEK = [
   { key: 'L', label: 'Lunes' }, { key: 'M', label: 'Martes' }, { key: 'X', label: 'Miércoles' },
@@ -19,10 +22,13 @@ export function Staff() {
   const [showInactive, setShowInactive] = useState(false);
   const [toast, setToast] = useState<{ msg: string } | null>(null);
 
-  // Estados de Modales
   const [empModal, setEmpModal] = useState<{ isOpen: boolean; data: Partial<Employee> }>({ isOpen: false, data: {} });
   const [shiftModal, setShiftModal] = useState<{ isOpen: boolean; data: Partial<Shift> }>({ isOpen: false, data: {} });
+  const [deactivateModal, setDeactivateModal] = useState<{ isOpen: boolean; id: number, currentStatus: boolean, name: string } | null>(null);
   const [passwordInput, setPasswordInput] = useState("");
+
+  const [sidebar, setSidebar] = useState<{ isOpen: boolean; emp: Employee | null }>({ isOpen: false, emp: null });
+  const [attendance, setAttendance] = useState<Attendance[]>([]);
 
   const loadData = async () => {
     setLoading(true);
@@ -39,15 +45,26 @@ export function Staff() {
 
   useEffect(() => { loadData(); }, []);
 
-  const filteredEmployees = useMemo(() => {
-    return employees.filter(e => showInactive ? !e.status : e.status);
-  }, [employees, showInactive]);
+  const filteredEmployees = useMemo(() => employees.filter(e => showInactive ? !e.status : e.status), [employees, showInactive]);
 
-  const handleToggleStatus = async (id: number, currentStatus: boolean) => {
-    if (!confirm(`¿Estás seguro de ${currentStatus ? 'dar de baja' : 'reactivar'} a este empleado?`)) return;
+  useEffect(() => {
+    if (sidebar.isOpen && sidebar.emp) {
+      const fetchAtt = async () => {
+        const today = new Date();
+        const start = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+        const end = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
+        setAttendance(await getAttendance(sidebar.emp!.id, start, end));
+      };
+      fetchAtt();
+    }
+  }, [sidebar.isOpen, sidebar.emp]);
+
+  const handleToggleStatus = async () => {
+    if (!deactivateModal) return;
     setLoading(true);
     try {
-      await toggleEmployee(id, !currentStatus);
+      await toggleEmployee(deactivateModal.id, !deactivateModal.currentStatus);
+      setDeactivateModal(null);
       await loadData();
     } catch (e) {
       setToast({ msg: "Error al actualizar estado" });
@@ -72,9 +89,7 @@ export function Staff() {
       setPasswordInput("");
       await loadData();
     } catch (error) {
-      console.error(error);
       setToast({ msg: "Error al guardar el empleado" });
-      setTimeout(() => setToast(null), 3000);
     } finally {
       setLoading(false);
     }
@@ -89,7 +104,6 @@ export function Staff() {
     }
     setLoading(true);
     try {
-      // Usamos camelCase (shiftId, empId) para que Tauri lo lea correctamente
       await saveShift({
         shiftId: shiftModal.data.shiftId || 0,
         empId: shiftModal.data.employeeId,
@@ -100,9 +114,7 @@ export function Staff() {
       setShiftModal({ isOpen: false, data: {} });
       await loadData();
     } catch (error) {
-      console.error(error);
       setToast({ msg: "Error al guardar el turno" });
-      setTimeout(() => setToast(null), 3000);
     } finally {
       setLoading(false);
     }
@@ -110,11 +122,90 @@ export function Staff() {
 
   const toggleDay = (dayKey: string) => {
     const currentDays = shiftModal.data.daysCovered ? shiftModal.data.daysCovered.split(',') : [];
-    const newDays = currentDays.includes(dayKey) 
-        ? currentDays.filter(d => d !== dayKey) 
-        : [...currentDays, dayKey];
+    const newDays = currentDays.includes(dayKey) ? currentDays.filter(d => d !== dayKey) : [...currentDays, dayKey];
     setShiftModal(prev => ({ ...prev, data: { ...prev.data, daysCovered: newDays.join(',') } }));
   };
+
+  const handleInteractiveDayOff = async (dateStr: string) => {
+      if (!sidebar.emp) return;
+      setLoading(true);
+      try {
+          await toggleDayOff(sidebar.emp.id, dateStr);
+          // Recargar asistencia
+          const today = new Date();
+          const start = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+          const end = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
+          setAttendance(await getAttendance(sidebar.emp.id, start, end));
+      } finally {
+          setLoading(false);
+      }
+  };
+
+  // --- Algoritmo de Asistencia ---
+  const currentMonthDays = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = today.getMonth();
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const dayMap = ['D','L','M','X','J','V','S'];
+
+    if (!sidebar.emp) return { days: [], stats: { onTime: 0, late: 0, absent: 0, dayOff: 0 } };
+    
+    // Convertir fecha de creación del empleado para evitar faltas históricas
+    const empCreatedAt = sidebar.emp.createdAt ? new Date(sidebar.emp.createdAt + "T00:00:00").toISOString().split('T')[0] : "2000-01-01";
+    const empShift = shifts.find(s => s.employeeId === sidebar.emp!.id);
+
+    let onTime = 0, late = 0, absent = 0, dayOffCount = 0;
+
+    const days = Array.from({ length: daysInMonth }, (_, i) => {
+        const d = i + 1;
+        const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const att = attendance.find(a => a.date === dateStr);
+        const isScheduled = empShift ? empShift.daysCovered.split(',').includes(dayMap[new Date(y, m, d).getDay()]) : false;
+
+        let status = 'future'; // Gris
+        
+        if (dateStr < empCreatedAt) {
+            status = 'inactive'; // Días antes de que el empleado fuera contratado
+        }
+        else if (att?.isDayOff) {
+            status = 'dayoff'; // Azul
+            if (dateStr <= todayStr) dayOffCount++;
+        } 
+        else if (dateStr > todayStr) {
+            status = 'future';
+        }
+        else if (!isScheduled) {
+            status = 'future'; 
+        }
+        else if (!att?.clockIn) {
+            if (dateStr < todayStr) {
+                status = 'absent'; // Rojo
+                absent++;
+            } else {
+                status = 'future'; // Es hoy, pero aún no llega
+            }
+        }
+        else {
+            const [sH, sM] = empShift!.startTime.split(':').map(Number);
+            const [cH, cM] = att.clockIn.split(':').map(Number);
+            const diffMins = (cH * 60 + cM) - (sH * 60 + sM);
+
+            if (diffMins <= 15) {
+                status = 'ontime'; // Verde
+                onTime++;
+            } else {
+                status = 'late'; // Amarillo
+                late++;
+            }
+        }
+
+        return { day: d, dateStr, status, clockIn: att?.clockIn };
+    });
+
+    return { days, stats: { onTime, late, absent, dayOff: dayOffCount } };
+  }, [sidebar.emp, attendance, shifts]);
 
   return (
     <motion.div className="absolute inset-0 flex flex-col p-2 sm:p-4 lg:p-5 gap-3 text-gray-900 z-20 bg-gray-50/50 backdrop-blur-sm" initial={{ y: "100%" }} animate={{ y: "0%" }} exit={{ y: "100%" }} transition={{ duration: 0.28 }}>
@@ -142,14 +233,11 @@ export function Staff() {
                 {activeTab === 'employees' && (
                     <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-500 hover:text-gray-900 transition-colors bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200">
                         <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} className="rounded text-primary focus:ring-primary" />
-                        Mostrar Inactivos (Bajas)
+                        Mostrar Inactivos
                     </label>
                 )}
             </div>
-            <button 
-                onClick={() => activeTab === 'employees' ? setEmpModal({ isOpen: true, data: { isAdmin: false } }) : setShiftModal({ isOpen: true, data: { startTime: '08:00', endTime: '16:00', daysCovered: 'L,M,X,J,V' } })} 
-                className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-gray-800 transition-colors cursor-pointer"
-            >
+            <button onClick={() => activeTab === 'employees' ? setEmpModal({ isOpen: true, data: { isAdmin: false } }) : setShiftModal({ isOpen: true, data: { startTime: '08:00', endTime: '16:00', daysCovered: 'L,M,X,J,V' } })} className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-gray-800 transition-colors cursor-pointer">
                 + Registrar {activeTab === 'employees' ? 'Empleado' : 'Turno'}
             </button>
         </div>
@@ -161,19 +249,21 @@ export function Staff() {
                 <tr><th className="p-4">Nombre Completo</th><th className="p-4">Usuario</th><th className="p-4">Rol</th><th className="p-4 text-right">Acciones</th></tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredEmployees.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-gray-400 font-bold">No hay registros para mostrar.</td></tr>}
+                {filteredEmployees.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-gray-400 font-bold">No hay registros.</td></tr>}
                 {filteredEmployees.map(e => (
-                  <tr key={e.id} className="hover:bg-white transition-colors">
+                  <tr key={e.id} className="hover:bg-white transition-colors group">
                     <td className="p-4 font-extrabold text-gray-900">{e.name} {e.lastname}</td>
                     <td className="p-4 text-gray-500 font-medium">@{e.username}</td>
                     <td className="p-4">
-                        <span className={`px-2.5 py-1 rounded-md text-[10px] font-extrabold border tracking-wider ${e.isAdmin ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                        <span className={`px-2.5 py-1 rounded-md text-[10px] font-extrabold border tracking-wider ${e.isAdmin ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
                             {e.isAdmin ? 'ADMINISTRADOR' : 'CAJERO'}
                         </span>
                     </td>
-                    <td className="p-4 text-right gap-3 flex justify-end">
-                      <button onClick={() => setEmpModal({ isOpen: true, data: e })} className="text-primary font-bold hover:underline cursor-pointer">Editar</button>
-                      <button onClick={() => handleToggleStatus(e.id, e.status)} className={`${e.status ? 'text-red-500' : 'text-green-600'} font-bold hover:underline cursor-pointer`}>
+                    <td className="p-4 text-right gap-4 flex justify-end items-center">
+                      <button onClick={() => setSidebar({isOpen: true, emp: e})} className="text-gray-500 font-bold hover:text-primary transition-colors cursor-pointer bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 text-xs">Revisar Asistencia</button>
+                      <div className="w-px h-4 bg-gray-200" />
+                      <button onClick={() => setEmpModal({ isOpen: true, data: e })} className="text-blue-500 font-bold hover:underline cursor-pointer">Editar</button>
+                      <button onClick={() => setDeactivateModal({ isOpen: true, id: e.id, currentStatus: e.status, name: e.name })} className={`${e.status ? 'text-red-500' : 'text-green-600'} font-bold hover:underline cursor-pointer`}>
                         {e.status ? 'Dar de Baja' : 'Reactivar'}
                       </button>
                     </td>
@@ -196,7 +286,7 @@ export function Staff() {
                         <div className="flex gap-1">
                             {DAYS_OF_WEEK.map(d => {
                                 const isCovered = s.daysCovered.split(',').includes(d.key);
-                                return <span key={d.key} className={`w-6 h-6 flex items-center justify-center rounded-full text-[10px] font-bold ${isCovered ? 'bg-primary text-white' : 'bg-gray-200 text-gray-400'}`}>{d.key}</span>
+                                return <span key={d.key} className={`w-6 h-6 flex items-center justify-center rounded-full text-[10px] font-bold ${isCovered ? 'bg-primary text-white shadow-sm' : 'bg-gray-200 text-gray-400'}`}>{d.key}</span>
                             })}
                         </div>
                     </td>
@@ -211,7 +301,69 @@ export function Staff() {
         </div>
       </section>
 
-      {/* MODAL EMPLEADO */}
+      {/* PANEL LATERAL DE ASISTENCIA */}
+      <AnimatePresence>
+        {sidebar.isOpen && sidebar.emp && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/20 z-[60] backdrop-blur-sm" onClick={() => setSidebar({isOpen: false, emp: null})} />
+            <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", stiffness: 300, damping: 30 }} className="fixed top-0 right-0 h-full w-full sm:w-[450px] bg-white shadow-2xl z-[70] flex flex-col border-l border-gray-200">
+              
+              <div className="p-5 border-b border-gray-200 bg-gray-50 flex justify-between items-center shrink-0">
+                  <div>
+                      <h2 className="text-xl font-extrabold text-gray-900 leading-none">{sidebar.emp.name}</h2>
+                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1 block">Control de Asistencia • Mes Actual</span>
+                  </div>
+                  <button onClick={() => setSidebar({isOpen: false, emp: null})} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 text-gray-500 hover:bg-red-500 hover:text-white transition-colors cursor-pointer text-sm font-bold">✕</button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-6">
+                
+                {/* Resumen */}
+                <div className="grid grid-cols-4 gap-2 bg-gray-50 p-3 rounded-2xl border border-gray-100 text-center shrink-0">
+                    <div className="flex flex-col"><span className="text-xl font-extrabold text-green-600">{currentMonthDays.stats.onTime}</span><span className="text-[9px] font-bold text-gray-500 uppercase">A Tiempo</span></div>
+                    <div className="flex flex-col border-l border-gray-200"><span className="text-xl font-extrabold text-yellow-500">{currentMonthDays.stats.late}</span><span className="text-[9px] font-bold text-gray-500 uppercase">Retardo</span></div>
+                    <div className="flex flex-col border-l border-gray-200"><span className="text-xl font-extrabold text-red-500">{currentMonthDays.stats.absent}</span><span className="text-[9px] font-bold text-gray-500 uppercase">Faltas</span></div>
+                    <div className="flex flex-col border-l border-gray-200"><span className="text-xl font-extrabold text-blue-500">{currentMonthDays.stats.dayOff}</span><span className="text-[9px] font-bold text-gray-500 uppercase">Libres</span></div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs font-bold text-blue-800 text-center">
+                    💡 Selecciona cualquier día en el calendario para alternar el estatus de "Día Libre".
+                </div>
+
+                {/* Calendario Interactivo Flujo */}
+                <div>
+                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Historial e Interacción</h3>
+                    <div className="grid grid-cols-7 gap-2">
+                        {currentMonthDays.days.map((d, i) => {
+                            const colorClass = 
+                                d.status === 'inactive' ? 'bg-gray-100 text-gray-300 border-transparent opacity-50' :
+                                d.status === 'ontime' ? 'bg-green-500 text-white shadow-sm border-green-600' :
+                                d.status === 'late' ? 'bg-yellow-400 text-yellow-900 shadow-sm border-yellow-500' :
+                                d.status === 'absent' ? 'bg-red-500 text-white shadow-sm border-red-600' :
+                                d.status === 'dayoff' ? 'bg-blue-500 text-white shadow-sm border-blue-600' :
+                                'bg-gray-50 text-gray-400 border-gray-200 opacity-80 hover:border-blue-400';
+
+                            return (
+                                <button 
+                                    key={i} 
+                                    onClick={() => handleInteractiveDayOff(d.dateStr)}
+                                    disabled={d.status === 'inactive'}
+                                    className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-all cursor-pointer ${d.status !== 'inactive' ? 'hover:scale-105 hover:shadow-md' : ''} ${colorClass}`}
+                                    title={d.status === 'inactive' ? 'Antes de contratación' : 'Clic para alternar Día Libre'}
+                                >
+                                    <span className="text-sm font-extrabold leading-none">{d.day}</span>
+                                </button>
+                            )
+                        })}
+                    </div>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* MODALES SECUNDARIOS */}
       <AnimatePresence>
         {empModal.isOpen && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -219,32 +371,16 @@ export function Staff() {
                 <h3 className="text-xl font-extrabold text-gray-900 mb-4 pb-2 border-b border-gray-100">{empModal.data.id ? 'Editar Empleado' : 'Nuevo Empleado'}</h3>
                 <div className="space-y-3 mb-6">
                     <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="text-xs font-bold text-gray-500 uppercase">Nombre</label>
-                            <input required type="text" value={empModal.data.name || ''} onChange={e => setEmpModal(p => ({...p, data: {...p.data, name: e.target.value}}))} className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary font-bold" />
-                        </div>
-                        <div>
-                            <label className="text-xs font-bold text-gray-500 uppercase">Apellidos</label>
-                            <input required type="text" value={empModal.data.lastname || ''} onChange={e => setEmpModal(p => ({...p, data: {...p.data, lastname: e.target.value}}))} className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary font-bold" />
-                        </div>
+                        <div><label className="text-xs font-bold text-gray-500 uppercase">Nombre</label><input required type="text" value={empModal.data.name || ''} onChange={e => setEmpModal(p => ({...p, data: {...p.data, name: e.target.value}}))} className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary font-bold" /></div>
+                        <div><label className="text-xs font-bold text-gray-500 uppercase">Apellidos</label><input required type="text" value={empModal.data.lastname || ''} onChange={e => setEmpModal(p => ({...p, data: {...p.data, lastname: e.target.value}}))} className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary font-bold" /></div>
                     </div>
-                    <div>
-                        <label className="text-xs font-bold text-gray-500 uppercase">Usuario (Login)</label>
-                        <input required type="text" value={empModal.data.username || ''} onChange={e => setEmpModal(p => ({...p, data: {...p.data, username: e.target.value}}))} className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary font-bold" />
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-gray-500 uppercase">Contraseña {empModal.data.id && '(Dejar en blanco para no cambiar)'}</label>
-                        <input required={!empModal.data.id} type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary font-bold" />
-                    </div>
+                    <div><label className="text-xs font-bold text-gray-500 uppercase">Usuario (Login)</label><input required type="text" value={empModal.data.username || ''} onChange={e => setEmpModal(p => ({...p, data: {...p.data, username: e.target.value}}))} className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary font-bold" /></div>
+                    <div><label className="text-xs font-bold text-gray-500 uppercase">Contraseña {empModal.data.id && '(Opcional)'}</label><input required={!empModal.data.id} type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary font-bold" /></div>
                     <div>
                         <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Rol en el Sistema</label>
                         <div className="flex gap-2">
-                            <label className={`flex-1 py-2 text-center rounded-lg text-xs font-bold border-2 cursor-pointer transition-colors ${!empModal.data.isAdmin ? 'border-primary bg-primary/10 text-primary' : 'border-gray-200 text-gray-500'}`}>
-                                <input type="radio" className="hidden" checked={!empModal.data.isAdmin} onChange={() => setEmpModal(p => ({...p, data: {...p.data, isAdmin: false}}))} /> Cajero
-                            </label>
-                            <label className={`flex-1 py-2 text-center rounded-lg text-xs font-bold border-2 cursor-pointer transition-colors ${empModal.data.isAdmin ? 'border-primary bg-primary/10 text-primary' : 'border-gray-200 text-gray-500'}`}>
-                                <input type="radio" className="hidden" checked={empModal.data.isAdmin} onChange={() => setEmpModal(p => ({...p, data: {...p.data, isAdmin: true}}))} /> Administrador
-                            </label>
+                            <label className={`flex-1 py-2 text-center rounded-lg text-xs font-bold border-2 cursor-pointer transition-colors ${!empModal.data.isAdmin ? 'border-primary bg-primary/10 text-primary' : 'border-gray-200 text-gray-500'}`}><input type="radio" className="hidden" checked={!empModal.data.isAdmin} onChange={() => setEmpModal(p => ({...p, data: {...p.data, isAdmin: false}}))} /> Cajero</label>
+                            <label className={`flex-1 py-2 text-center rounded-lg text-xs font-bold border-2 cursor-pointer transition-colors ${empModal.data.isAdmin ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-500'}`}><input type="radio" className="hidden" checked={empModal.data.isAdmin} onChange={() => setEmpModal(p => ({...p, data: {...p.data, isAdmin: true}}))} /> Administrador</label>
                         </div>
                     </div>
                 </div>
@@ -255,10 +391,7 @@ export function Staff() {
             </motion.form>
           </div>
         )}
-      </AnimatePresence>
 
-      {/* MODAL TURNO */}
-      <AnimatePresence>
         {shiftModal.isOpen && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
             <motion.form initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} onSubmit={handleSaveShift} className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-md border border-gray-100">
@@ -272,30 +405,15 @@ export function Staff() {
                         </select>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="text-xs font-bold text-gray-500 uppercase">Hora de Entrada</label>
-                            <input required type="time" value={shiftModal.data.startTime || ''} onChange={e => setShiftModal(p => ({...p, data: {...p.data, startTime: e.target.value}}))} className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary font-bold" />
-                        </div>
-                        <div>
-                            <label className="text-xs font-bold text-gray-500 uppercase">Hora de Salida</label>
-                            <input required type="time" value={shiftModal.data.endTime || ''} onChange={e => setShiftModal(p => ({...p, data: {...p.data, endTime: e.target.value}}))} className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary font-bold" />
-                        </div>
+                        <div><label className="text-xs font-bold text-gray-500 uppercase">Entrada</label><input required type="time" value={shiftModal.data.startTime || ''} onChange={e => setShiftModal(p => ({...p, data: {...p.data, startTime: e.target.value}}))} className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary font-bold" /></div>
+                        <div><label className="text-xs font-bold text-gray-500 uppercase">Salida</label><input required type="time" value={shiftModal.data.endTime || ''} onChange={e => setShiftModal(p => ({...p, data: {...p.data, endTime: e.target.value}}))} className="w-full mt-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary font-bold" /></div>
                     </div>
                     <div>
-                        <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Días de la Semana Laborables</label>
+                        <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Días Laborables</label>
                         <div className="flex justify-between gap-1">
                             {DAYS_OF_WEEK.map(day => {
                                 const isSelected = shiftModal.data.daysCovered?.split(',').includes(day.key);
-                                return (
-                                    <button 
-                                        key={day.key} 
-                                        type="button" 
-                                        onClick={() => toggleDay(day.key)}
-                                        className={`w-10 h-10 rounded-xl font-extrabold text-sm border-2 transition-all cursor-pointer ${isSelected ? 'bg-primary border-primary text-white shadow-md' : 'bg-gray-50 border-gray-200 text-gray-400 hover:border-gray-300'}`}
-                                    >
-                                        {day.key}
-                                    </button>
-                                );
+                                return <button key={day.key} type="button" onClick={() => toggleDay(day.key)} className={`w-10 h-10 rounded-xl font-extrabold text-sm border-2 transition-all cursor-pointer ${isSelected ? 'bg-primary border-primary text-white shadow-md' : 'bg-gray-50 border-gray-200 text-gray-400 hover:border-gray-300'}`}>{day.key}</button>;
                             })}
                         </div>
                     </div>
@@ -307,14 +425,32 @@ export function Staff() {
             </motion.form>
           </div>
         )}
+
+        {deactivateModal && (
+            <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+                <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-sm border border-gray-100 text-center">
+                    <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center text-3xl mb-4 ${deactivateModal.currentStatus ? 'bg-red-100 text-red-500' : 'bg-green-100 text-green-600'}`}>
+                        {deactivateModal.currentStatus ? '⚠️' : '✅'}
+                    </div>
+                    <h3 className="text-xl font-extrabold text-gray-900 mb-2">
+                        {deactivateModal.currentStatus ? '¿Dar de Baja?' : '¿Reactivar Empleado?'}
+                    </h3>
+                    <p className="text-sm font-bold text-gray-500 mb-6">
+                        Estás a punto de cambiar el estado de <span className="text-gray-900">{deactivateModal.name}</span>.
+                    </p>
+                    <div className="flex gap-3">
+                        <button onClick={() => setDeactivateModal(null)} className="flex-1 py-3 rounded-xl text-sm font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors cursor-pointer">Cancelar</button>
+                        <button onClick={handleToggleStatus} className={`flex-1 py-3 rounded-xl text-sm font-bold text-white shadow-md transition-colors cursor-pointer ${deactivateModal.currentStatus ? 'bg-red-500 hover:bg-red-600' : 'bg-green-600 hover:bg-green-700'}`}>Confirmar</button>
+                    </div>
+                </motion.div>
+            </div>
+        )}
       </AnimatePresence>
 
       <AnimatePresence>
         {toast && (
           <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="fixed bottom-6 z-[90] left-1/2 -translate-x-1/2">
-            <div className="px-6 py-3 rounded-full shadow-xl font-bold text-sm bg-gray-900 text-white border border-gray-700">
-              AVISO: {toast.msg}
-            </div>
+            <div className="px-6 py-3 rounded-full shadow-xl font-bold text-sm bg-gray-900 text-white border border-gray-700">AVISO: {toast.msg}</div>
           </motion.div>
         )}
       </AnimatePresence>

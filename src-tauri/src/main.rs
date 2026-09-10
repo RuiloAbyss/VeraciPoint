@@ -125,6 +125,9 @@ fn main() {
             commands::employee_commands::toggle_employee,
             commands::employee_commands::fetch_shifts,
             commands::employee_commands::save_shift,
+            commands::employee_commands::get_attendance,
+            commands::employee_commands::toggle_day_off,
+            commands::employee_commands::register_clock_in,
 
         ])
         .run(tauri::generate_context!())
