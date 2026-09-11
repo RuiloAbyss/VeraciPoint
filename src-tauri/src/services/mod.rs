@@ -4,3 +4,4 @@ pub mod sells_service;
 pub mod employee_service;
 pub mod order_service;
 pub mod report_service;
+pub mod banner_service;

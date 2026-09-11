@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
 import { ActionCard, type ActionCardProps } from "../../components/ActionCard";
 import { checkActiveTurn, openTurn, closeTurn } from "../../services/turnService";
+import { fetchBanners, type Banner } from "../../services/bannerService";
 
 interface UserSession {
   employeeId: number;
@@ -13,20 +14,83 @@ interface UserSession {
   isManagementMode?: boolean;
 }
 
-const PromoSection = () => (
-  <section className="flex flex-1 flex-col items-center justify-center rounded-3xl border border-gray-300/60 bg-gray-100/85 p-6 text-center shadow-md relative overflow-hidden select-none backdrop-blur-md">
-    <div className="w-full max-w-md rounded-2xl border-2 border-dashed border-gray-400/50 p-6 flex flex-col items-center">
-      <span className="mb-2 block text-3xl">🏷️</span>
-      <div className="inline-block rounded-full bg-gray-200 px-3 py-1 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 border border-gray-300/50">
-        Módulo En Espera
-      </div>
-      <h3 className="text-lg font-bold text-gray-900">Espacio para Promociones</h3>
-      <p className="mt-1 text-xs text-gray-500 max-w-sm">
-        Aquí se proyectarán ofertas especiales, listas de precios y avisos de temporada.
-      </p>
-    </div>
-  </section>
-);
+// --- SECCIÓN DE PROMOCIONES (REEL / FOTO ESTÁTICA) ---
+const PromoSection = ({ isAdmin, navigate }: { isAdmin: boolean; navigate: ReturnType<typeof useNavigate> }) => {
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const data = await fetchBanners(true); // Solo banners vigentes
+        setBanners(Array.isArray(data) ? data : []);
+      } catch (e) {
+        console.error("Error cargando banners", e);
+      }
+    };
+    load();
+  }, []);
+
+  // Control del carrusel: cambia cada 20 segundos solo si hay 2 o más
+  useEffect(() => {
+    if (banners.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % banners.length);
+    }, 20000); 
+    return () => clearInterval(interval);
+  }, [banners.length]);
+
+  return (
+    <section className="flex flex-1 flex-col items-center justify-center rounded-3xl border border-gray-300/60 bg-gray-100/85 p-0 text-center shadow-md relative overflow-hidden select-none backdrop-blur-md min-h-[200px] group">
+      
+      {/* Botón Ultra Compacto para Gestor de Banners */}
+      {isAdmin && (
+        <button
+          onClick={() => navigate("/banners")}
+          className="absolute top-4 right-4 w-9 h-7 flex items-center justify-center bg-black/20 hover:bg-black/70 text-white rounded-lg backdrop-blur-md transition-all cursor-pointer shadow-sm z-30 opacity-70 hover:opacity-100 border border-white/20"
+          title="Gestionar Promociones"
+        >
+          <span className="font-extrabold tracking-widest text-[10px] leading-none">•••</span>
+        </button>
+      )}
+
+      {banners.length > 0 ? (
+        <AnimatePresence>
+          <motion.img
+            key={currentIndex}
+            src={`data:image/jpeg;base64,${banners[currentIndex].photo}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.2 }}
+            className="absolute inset-0 w-full h-full object-cover"
+            alt="Promoción Activa"
+          />
+        </AnimatePresence>
+      ) : (
+        <div className="w-full max-w-md rounded-2xl border-2 border-dashed border-gray-400/50 p-6 flex flex-col items-center bg-white/50 relative z-10 m-6">
+          <span className="mb-2 block text-3xl">🏷️</span>
+          <div className="inline-block rounded-full bg-gray-200 px-3 py-1 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 border border-gray-300/50">
+            Módulo En Espera
+          </div>
+          <h3 className="text-lg font-bold text-gray-900">Espacio para Promociones</h3>
+          <p className="mt-1 text-xs text-gray-500 max-w-sm">
+            Aquí se proyectarán ofertas especiales, listas de precios y avisos de temporada.
+          </p>
+        </div>
+      )}
+      
+      {/* Puntos Indicadores (Solo si hay más de 1) */}
+      {banners.length > 1 && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-md z-20">
+            {banners.map((_, idx) => (
+                <div key={idx} className={`w-2 h-2 rounded-full transition-all ${idx === currentIndex ? 'bg-white scale-125' : 'bg-white/50'}`} />
+            ))}
+        </div>
+      )}
+    </section>
+  );
+};
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -68,7 +132,6 @@ export function Dashboard() {
             isManagementMode: parsed.isManagementMode || false
           });
 
-          // Solo mostramos el modal si NO hay turno activo Y NO estamos en modo gestión
           if (empId > 0 && !parsed.activeTurnId && !parsed.isManagementMode) {
             const hasTurn = await checkActiveTurn(empId);
             if (!hasTurn) {
@@ -147,13 +210,14 @@ export function Dashboard() {
     navigate("/login");
   };
 
+  // El menú ahora tiene 6 tarjetas perfectas para la vista de Administrador
   const menuActions: (Omit<ActionCardProps, "onClick"> & { route: string; adminOnly?: boolean })[] = [
     { id: "ventas", title: "Realizar Ventas", description: "Cobro ágil en caja", iconBg: "bg-primary/20 text-primary", icon: "🛒", route: "/sells", adminOnly: false },
     { id: "inventario", title: "Control de Inventario", description: "Altas y existencias", iconBg: "bg-secondary/30 text-secondary", icon: "📦", route: "/inventory", adminOnly: false },
-    { id: "historial", title: "Historial de Ventas", description: "Tickets previos", iconBg: "bg-tertiary/25 text-tertiary", icon: "📄", route: "/history", adminOnly: true },
     { id: "pedidos", title: "Orden de Pedido", description: "Solicitar mercancía", iconBg: "bg-blue-500/20 text-blue-600", icon: "📋", route: "/orders", adminOnly: false },
+    { id: "historial", title: "Historial de Ventas", description: "Tickets previos", iconBg: "bg-tertiary/25 text-tertiary", icon: "📄", route: "/history", adminOnly: true },
     { id: "personal", title: "Control de Personal", description: "Horarios y permisos", iconBg: "bg-gray-200 text-gray-700", icon: "👥", route: "/staff", adminOnly: true },
-    { id: "reportes", title: "Reportes", description: "Balance general", iconBg: "bg-secondary/30 text-secondary", icon: "📊", route: "/reports", adminOnly: true },
+    { id: "reportes", title: "Auditoría", description: "Visor de eventos", iconBg: "bg-secondary/30 text-secondary", icon: "📊", route: "/reports", adminOnly: true },
   ];
 
   const handleNavigation = (route: string, id: string) => {
@@ -222,9 +286,9 @@ export function Dashboard() {
 
       {session.isAdmin ? (
         <>
-          <PromoSection />
+          <PromoSection isAdmin={session.isAdmin} navigate={navigate} />
           <section className="w-full shrink-0 mt-2">
-            <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
               {menuActions.map(({ route, adminOnly, ...cardProps }) => (
                 <ActionCard
                   key={cardProps.id}
@@ -250,12 +314,12 @@ export function Dashboard() {
                 ))}
               </div>
             </section>
-            <PromoSection />
+            <PromoSection isAdmin={session.isAdmin} navigate={navigate} />
           </div>
         </>
       )}
 
-      {/* Modal Obligatorio Apertura de Caja / Bypass Gestión */}
+      {/* Modal Obligatorio Apertura de Caja */}
       <AnimatePresence>
         {isTurnModalOpen && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">

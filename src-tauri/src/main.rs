@@ -140,8 +140,12 @@ fn main() {
             commands::order_commands::edit_provider,
 
             commands::report_commands::register_manual_event,
-            commands::report_commands::fetch_reports
+            commands::report_commands::fetch_reports,
 
+            commands::banner_commands::fetch_banners,
+            commands::banner_commands::create_banner,
+            commands::banner_commands::delete_banner,
+            commands::banner_commands::update_banner,
 
         ])
         .run(tauri::generate_context!())
