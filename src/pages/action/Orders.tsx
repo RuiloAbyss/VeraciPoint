@@ -353,7 +353,7 @@ export function Orders() {
                 ))}
               </div>
             </section>
-            
+            //TODO: Corregir cards de provider con mayor información, asegurar que los datos extra se guardan correctamente.
             <section className="flex-col flex-1 rounded-2xl bg-white border border-gray-200 p-4 shadow-sm overflow-hidden flex relative">
               {!selectedProviderObj ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-gray-400"><span className="text-4xl mb-2">📦</span><p className="font-bold">Selecciona un proveedor para ver su catálogo</p></div>
