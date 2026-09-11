@@ -382,7 +382,7 @@ export function Inventory() {
           </div>
 
           <select value={stockFilter} onChange={(e) => setStockFilter(e.target.value)} className="w-full rounded-lg bg-white px-2 py-2 text-sm border border-gray-200 text-gray-700 outline-none cursor-pointer">
-            <option value="Niveles de Stock">Niveles de Stock</option>
+            <option value="Niveles de Stock">Todas las cantidades</option>
             <option value="Bajo">Bajo</option>
             <option value="Sin stock">Sin stock</option>
             <option value="Descontinuado">Descontinuado</option>
@@ -403,7 +403,7 @@ export function Inventory() {
             <button onClick={executeActivate} className="w-full rounded-lg bg-green-100 hover:bg-green-500 hover:text-white py-2 px-6 text-xs font-bold text-green-700 shadow-sm cursor-pointer transition-colors">⬆️ Dar de Alta</button>
           ) : (
             <>
-              <button onClick={() => setModalState('restock')} className="w-full rounded-lg bg-primary/10 hover:bg-primary hover:text-white py-2 text-xs font-bold text-primary shadow-sm cursor-pointer">+ Surtir</button>
+              <button onClick={() => setModalState('restock')} className="w-full rounded-lg bg-primary/10 hover:bg-primary hover:text-white py-2 text-xs font-bold  border border-primary text-primary shadow-sm cursor-pointer">+ Surtir</button>
               <button disabled={!isAdmin} onClick={() => setModalState('offer')} className={`w-full rounded-lg py-2 text-xs font-bold shadow-sm ${isAdmin ? "bg-white border border-orange-200 text-orange-600 hover:ring-2 hover:ring-orange-400 cursor-pointer transition-all" : "bg-gray-100 text-gray-400"}`}>🏷️ Ofertar</button>
               <button disabled={!isAdmin} onClick={() => setModalState('edit')} className={`w-full rounded-lg py-2 text-xs font-bold shadow-sm ${isAdmin ? "bg-white border border-gray-300 text-gray-700 hover:ring-2 hover:ring-gray-400 cursor-pointer transition-all" : "bg-gray-100 text-gray-400"}`}>✏️ Editar</button>
               <button disabled={!isAdmin} onClick={() => setModalState('deactivate')} className={`w-full rounded-lg py-2 text-xs font-bold shadow-sm ${isAdmin ? "bg-white border border-red-200 text-red-600 hover:ring-2 hover:ring-red-400 cursor-pointer transition-all" : "bg-gray-100 text-gray-400"}`}>🗑️ Baja</button>

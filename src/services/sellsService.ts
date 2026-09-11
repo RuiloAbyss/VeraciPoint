@@ -26,6 +26,7 @@ export interface Sale {
   date: string;
   cash: boolean;
   total: number;
+  products?: string;
 }
 
 export interface SaleDetail {

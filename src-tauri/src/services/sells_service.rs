@@ -65,19 +65,24 @@ pub async fn delete_product_hard(pool: &bb8::Pool<bb8_tiberius::ConnectionManage
 
 pub async fn fetch_sales(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>) -> Result<Vec<serde_json::Value>, String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    
+    // Forzamos el tipo VARCHAR(4000) para que Tiberius pueda leer la cadena correctamente
     let query = "
         SELECT 
             s.ventaId, 
             e.name + ' ' + e.lastname AS employeeName, 
             FORMAT(s.sellsDate, 'dd/MM/yyyy HH:mm') as saleDate, 
             s.cash, 
-            CAST(s.total AS FLOAT) as total
+            CAST(s.total AS FLOAT) as total,
+            ISNULL(CAST((SELECT STRING_AGG(productName, ', ') FROM sells_detail WHERE ventaId = s.ventaId) AS VARCHAR(4000)), '') as products
         FROM sells s
         INNER JOIN employee e ON s.employeeId = e.employeeId
         ORDER BY s.ventaId DESC
     ";
+    
     let stream = client.simple_query(query).await.map_err(|e| e.to_string())?;
     let rows = stream.into_first_result().await.map_err(|e| e.to_string())?;
+    
     let mut sales = Vec::new();
     for row in rows {
         sales.push(serde_json::json!({
@@ -86,6 +91,7 @@ pub async fn fetch_sales(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>) -> R
             "date": row.get::<&str, _>("saleDate").unwrap_or(""),
             "cash": row.get::<bool, _>("cash").unwrap_or(true),
             "total": row.get::<f64, _>("total").unwrap_or(0.0),
+            "products": row.get::<&str, _>("products").unwrap_or("")
         }));
     }
     Ok(sales)

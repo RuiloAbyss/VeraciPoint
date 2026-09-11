@@ -107,14 +107,18 @@ export function Orders() {
 
   const providerProducts = useMemo(() => {
     if (!selectedProvider) return [];
-    let list = products.filter(p => p.category === selectedProvider);
+    let list = products.filter(p => p.category === selectedProvider && p.status !== 0);
     if (searchProd) list = list.filter(p => p.name.toLowerCase().includes(searchProd.toLowerCase()));
     return list;
   }, [products, selectedProvider, searchProd]);
 
   const availableProductsForActiveOrder = useMemo(() => {
     if (!activeOrder) return [];
-    return products.filter(p => p.category === activeOrder.provider && !activeDetails.some(ad => ad.productId === p.id));
+    return products.filter(p => 
+      p.category === activeOrder.provider && 
+      p.status !== 0 && 
+      !activeDetails.some(ad => ad.productId === p.id)
+    );
   }, [products, activeOrder, activeDetails]);
 
   const filteredExtraProducts = useMemo(() => {

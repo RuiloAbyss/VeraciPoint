@@ -3,7 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLoading } from "../../components/LoadingContext";
 import { fetchSalesHistory, fetchSaleDetails, type Sale, type SaleDetail } from "../../services/sellsService";
-import { Analytics } from "./Analytics"; // Importación del componente separado
+import { getEmployees } from "../../services/employeeService"; // Importado igual que en Staff.tsx
+import { Analytics } from "./Analytics"; 
+
+const getLocalToday = () => {
+  const tzoffset = (new Date()).getTimezoneOffset() * 60000;
+  return new Date(Date.now() - tzoffset).toISOString().split("T")[0];
+};
 
 export function History() {
   const navigate = useNavigate();
@@ -12,9 +18,13 @@ export function History() {
   const [activeTab, setActiveTab] = useState<'history' | 'analytics'>('history');
 
   const [sales, setSales] = useState<Sale[]>([]);
+  const [activeEmployees, setActiveEmployees] = useState<string[]>(["Todos"]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
+  
+  // Filtros estrictos sin barra de búsqueda
   const [paymentFilter, setPaymentFilter] = useState("Todos");
+  const [dateFilter, setDateFilter] = useState(getLocalToday()); 
+  const [employeeFilter, setEmployeeFilter] = useState("Todos");
 
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [saleDetails, setSaleDetails] = useState<SaleDetail[]>([]);
@@ -26,38 +36,52 @@ export function History() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, paymentFilter, activeTab]);
+  }, [paymentFilter, activeTab, dateFilter, employeeFilter]);
 
   useEffect(() => {
-    const loadHistory = async () => {
+    const loadInitialData = async () => {
       setIsLoadingHistory(true);
       try {
-        const data = await fetchSalesHistory();
-        setSales(Array.isArray(data) ? data : []);
+        const salesData = await fetchSalesHistory();
+        setSales(Array.isArray(salesData) ? salesData : []);
+
+        // Reutilizamos la misma función estructurada que usa Staff.tsx
+        const empsData = await getEmployees();
+        
+        // Filtrado riguroso de activos evaluando el estado del objeto
+        const active = (Array.isArray(empsData) ? empsData : [])
+          .filter((e: any) => e.status === true || e.status === 1 || String(e.status) === "true")
+          .map((e: any) => `${e.name} ${e.lastname}`);
+        
+        setActiveEmployees(["Todos", ...Array.from(new Set(active))]);
       } catch (error) {
-        setToast({ msg: "Error al cargar el historial" });
+        setToast({ msg: "Error al cargar la información" });
         setTimeout(() => setToast(null), 3500);
       } finally {
         setIsLoadingHistory(false);
       }
     };
-    loadHistory();
+    loadInitialData();
   }, []);
 
   const filteredSales = useMemo(() => {
     let result = sales;
-    if (searchTerm) {
-      const lower = searchTerm.toLowerCase();
-      result = result.filter(s => 
-        s.id.toString().includes(lower) || 
-        (s.employeeName && s.employeeName.toLowerCase().includes(lower)) ||
-        (s.date && s.date.includes(lower))
-      );
-    }
+
     if (paymentFilter === "Efectivo") result = result.filter(s => s.cash);
     if (paymentFilter === "Tarjeta") result = result.filter(s => !s.cash);
+    
+    if (employeeFilter !== "Todos") {
+        result = result.filter(s => s.employeeName === employeeFilter);
+    }
+
+    if (dateFilter) {
+        const [y, m, d] = dateFilter.split('-');
+        const formattedDate = `${d}/${m}/${y}`;
+        result = result.filter(s => s.date && s.date.startsWith(formattedDate));
+    }
+
     return result;
-  }, [sales, searchTerm, paymentFilter]);
+  }, [sales, paymentFilter, employeeFilter, dateFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredSales.length / itemsPerPage));
   const paginatedSales = filteredSales.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -120,19 +144,30 @@ export function History() {
         </div>
       </header>
 
-      {/* RENDERIZADO CONDICIONAL DE PESTAÑAS */}
       {activeTab === 'history' ? (
         <div className="flex flex-col flex-1 min-h-0 gap-3">
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 rounded-xl bg-white border border-gray-200 p-3 shadow-sm shrink-0">
-            <div className="flex-1 w-full min-w-0">
-              <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Buscar Folio, Fecha o Cajero..." className="w-full rounded-lg bg-gray-50 px-4 py-2 text-sm outline-none border border-gray-200 focus:border-primary transition-colors" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 rounded-xl bg-white border border-gray-200 p-3 shadow-sm shrink-0 items-end">
+            
+            <div className="col-span-1">
+              <label className="text-[10px] font-bold text-gray-500 uppercase">Fecha</label>
+              <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} className="w-full rounded-lg bg-gray-50 px-3 py-2 text-sm outline-none border border-gray-200 focus:border-primary transition-colors" />
             </div>
-            <div className="hidden lg:block w-px h-8 bg-gray-200 mx-1" />
-            <select value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)} className="w-full lg:w-48 rounded-lg bg-white px-3 py-2 text-sm border border-gray-200 text-gray-700 outline-none cursor-pointer hover:border-gray-300 transition-colors">
-              <option value="Todos">Todos los pagos</option>
-              <option value="Efectivo">Pago Efectivo</option>
-              <option value="Tarjeta">Pago Tarjeta</option>
-            </select>
+
+            <div className="col-span-1">
+              <label className="text-[10px] font-bold text-gray-500 uppercase">Cajero (Activos)</label>
+              <select value={employeeFilter} onChange={(e) => setEmployeeFilter(e.target.value)} className="w-full rounded-lg bg-white px-3 py-2 text-sm border border-gray-200 text-gray-700 outline-none cursor-pointer hover:border-gray-300 transition-colors">
+                {activeEmployees.map((emp, idx) => <option key={idx} value={emp}>{emp}</option>)}
+              </select>
+            </div>
+
+            <div className="col-span-1">
+              <label className="text-[10px] font-bold text-gray-500 uppercase">Método</label>
+              <select value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)} className="w-full rounded-lg bg-white px-3 py-2 text-sm border border-gray-200 text-gray-700 outline-none cursor-pointer hover:border-gray-300 transition-colors">
+                <option value="Todos">Todos</option>
+                <option value="Efectivo">Efectivo</option>
+                <option value="Tarjeta">Tarjeta</option>
+              </select>
+            </div>
           </div>
 
           <section className="flex-col flex-1 rounded-2xl bg-gray-100/50 border border-gray-200 p-3 lg:p-4 overflow-hidden flex">
@@ -140,7 +175,7 @@ export function History() {
             {isLoadingHistory ? (
               <div className="col-span-full p-4 text-center font-bold text-gray-500">Cargando historial...</div>
             ) : paginatedSales.length === 0 ? (
-              <div className="col-span-full p-4 text-center font-bold text-gray-500">No se encontraron ventas.</div>
+              <div className="col-span-full p-4 text-center font-bold text-gray-500">No se encontraron ventas con estos filtros.</div>
             ) : (
               paginatedSales.map((sale) => (
                 <button key={sale.id} onClick={() => handleOpenDetails(sale)} className="group flex flex-col gap-2 rounded-xl bg-white p-3 text-left cursor-pointer overflow-hidden border border-gray-200 hover:border-primary/50 shadow-sm hover:shadow-md transition-all">
@@ -156,7 +191,9 @@ export function History() {
                       <span className="text-[10px] text-gray-500 font-bold uppercase">Cajero:</span>
                       <span className="text-xs font-semibold text-gray-700 truncate max-w-[120px]">{sale.employeeName}</span>
                     </div>
-                    <span className="font-extrabold text-primary text-lg">${Number(sale.total).toFixed(2)}</span>
+                    <span className={`font-extrabold text-lg ${Number(sale.total) < 0 ? 'text-red-600' : 'text-primary'}`}>
+                      ${Number(sale.total).toFixed(2)}
+                    </span>
                   </div>
                 </button>
               ))
@@ -169,7 +206,6 @@ export function History() {
         <Analytics />
       )}
 
-      {/* Modal del Ticket */}
       <AnimatePresence>
         {isModalOpen && selectedSale && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -201,8 +237,10 @@ export function History() {
 
               <div className="border-t border-gray-200 pt-4 shrink-0">
                 <div className="flex justify-between items-center mb-4 px-2">
-                    <span className="text-sm font-bold text-gray-500 uppercase tracking-widest">Total Cobrado</span>
-                    <span className="text-2xl font-extrabold text-gray-900">${Number(selectedSale.total).toFixed(2)}</span>
+                    <span className="text-sm font-bold text-gray-500 uppercase tracking-widest">Total Registrado</span>
+                    <span className={`text-2xl font-extrabold ${Number(selectedSale.total) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                      ${Number(selectedSale.total).toFixed(2)}
+                    </span>
                 </div>
                 <button onClick={() => setIsModalOpen(false)} className="w-full rounded-xl bg-gray-900 px-4 py-3 text-sm font-bold text-white hover:bg-gray-800 transition-colors cursor-pointer shadow-lg">
                   Cerrar Ticket
