@@ -1,14 +1,15 @@
 use bb8::Pool;
 use bb8_tiberius::ConnectionManager;
 
-pub async fn get_reports(pool: &Pool<ConnectionManager>) -> Result<Vec<serde_json::Value>, String> {
+pub async fn get_reports(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>) -> Result<Vec<serde_json::Value>, String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
     
     let query = "
         SELECT r.reportId, r.description, r.type, 
                ISNULL(e.name + ' ' + e.lastname, 'Sistema') as employee,
                CONVERT(VARCHAR(10), r.createdAt, 120) as date,
-               CONVERT(VARCHAR(5), r.createdAt, 108) as time
+               CONVERT(VARCHAR(5), r.createdAt, 108) as time,
+               r.referenceId
         FROM reports r
         LEFT JOIN employee e ON r.employeeId = e.employeeId
         ORDER BY r.createdAt DESC
@@ -24,7 +25,8 @@ pub async fn get_reports(pool: &Pool<ConnectionManager>) -> Result<Vec<serde_jso
             "type": r.get::<&str, _>("type").unwrap_or(""),
             "employee": r.get::<&str, _>("employee").unwrap_or("Sistema"),
             "date": r.get::<&str, _>("date").unwrap_or(""),
-            "time": r.get::<&str, _>("time").unwrap_or("")
+            "time": r.get::<&str, _>("time").unwrap_or(""),
+            "referenceId": r.get::<i32, _>("referenceId")
         }));
     }
     Ok(list)
