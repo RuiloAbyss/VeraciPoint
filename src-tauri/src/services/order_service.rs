@@ -5,7 +5,8 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OrderDetailInput {
-    pub product_id: i32,
+    pub product_id: Option<i32>,
+    pub name: String, 
     pub expected_qty: f64,
     pub received_qty: Option<f64>,
     pub unit_cost: f64,
@@ -16,35 +17,27 @@ pub async fn create_order(pool: &Pool<ConnectionManager>, cat_name: String, emp_
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
     client.simple_query("BEGIN TRAN;").await.map_err(|e| e.to_string())?;
 
-    // Modificamos la consulta para que busque el ID real de la categoría usando el nombre enviado
     let q_order = "
         DECLARE @RealCatId VARCHAR(36);
         SELECT TOP 1 @RealCatId = categoryId FROM category WHERE name = @P1;
-        
-        IF @RealCatId IS NULL BEGIN
-            THROW 51000, 'El proveedor no existe en la base de datos.', 1;
-        END
-
+        IF @RealCatId IS NULL THROW 51000, 'Proveedor no encontrado', 1;
         DECLARE @Out TABLE (id INT);
-        INSERT INTO purchase_order (categoryId, employeeId, total) 
-        OUTPUT INSERTED.orderId INTO @Out 
-        VALUES (@RealCatId, @P2, @P3);
-        
+        INSERT INTO purchase_order (categoryId, employeeId, total) OUTPUT INSERTED.orderId INTO @Out VALUES (@RealCatId, @P2, @P3);
         SELECT id FROM @Out;
     ";
     
-    // Ejecutar la inserción principal
+    // 1. Ejecutar consulta y consumir el stream antes de evaluar el error
     let order_res: Result<i32, String> = match client.query(q_order, &[&cat_name, &emp_id, &total]).await {
         Ok(stream) => {
             match stream.into_row().await {
                 Ok(Some(row)) => Ok(row.get::<i32, _>(0).unwrap_or(0)),
-                _ => Err("No se obtuvo el ID de la orden".to_string()),
+                _ => Err("No se obtuvo el ID de la orden".into()),
             }
         },
         Err(e) => Err(e.to_string()),
     };
 
-    // Evaluar y asegurar el rollback
+    // 2. Hacer rollback con client liberado
     let order_id = match order_res {
         Ok(id) => id,
         Err(e) => {
@@ -53,12 +46,10 @@ pub async fn create_order(pool: &Pool<ConnectionManager>, cat_name: String, emp_
         }
     };
 
-    // Insertar los productos al carrito
     for d in details {
-        let q_det = "INSERT INTO purchase_order_detail (orderId, productId, expectedQty, unitCost, subtotal) VALUES (@P1, @P2, @P3, @P4, @P5)";
-        if let Err(e) = client.execute(q_det, &[&order_id, &d.product_id, &d.expected_qty, &d.unit_cost, &d.subtotal]).await {
-            let _ = client.simple_query("ROLLBACK TRAN;").await;
-            return Err(format!("Error insertando detalle: {}", e));
+        let q_det = "INSERT INTO purchase_order_detail (orderId, productName, expectedQty, unitCost, subtotal) VALUES (@P1, @P2, @P3, @P4, @P5)";
+        if let Err(e) = client.execute(q_det, &[&order_id, &d.name, &d.expected_qty, &d.unit_cost, &d.subtotal]).await {
+            let _ = client.simple_query("ROLLBACK TRAN;").await; return Err(e.to_string());
         }
     }
 
@@ -76,11 +67,9 @@ pub async fn process_order(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, or
     }
 
     if status == "Cancelada" {
-        client.simple_query("COMMIT TRAN;").await.map_err(|e| e.to_string())?;
-        return Ok(());
+        client.simple_query("COMMIT TRAN;").await.map_err(|e| e.to_string())?; return Ok(());
     }
 
-    // SINCRONIZACIÓN: Borramos los detalles viejos y escribimos la lista final del frontend
     let q_del = "DELETE FROM purchase_order_detail WHERE orderId = @P1";
     if let Err(e) = client.execute(q_del, &[&order_id]).await {
         let _ = client.simple_query("ROLLBACK TRAN;").await; return Err(e.to_string());
@@ -88,15 +77,14 @@ pub async fn process_order(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, or
 
     for d in &details {
         let recv = d.received_qty.unwrap_or(0.0);
-        
-        let q_det = "INSERT INTO purchase_order_detail (orderId, productId, expectedQty, receivedQty, unitCost, subtotal) VALUES (@P1, @P2, @P3, @P4, @P5, @P6)";
-        if let Err(e) = client.execute(q_det, &[&order_id, &d.product_id, &d.expected_qty, &recv, &d.unit_cost, &d.subtotal]).await {
+        let q_det = "INSERT INTO purchase_order_detail (orderId, productName, expectedQty, receivedQty, unitCost, subtotal) VALUES (@P1, @P2, @P3, @P4, @P5, @P6)";
+        if let Err(e) = client.execute(q_det, &[&order_id, &d.name, &d.expected_qty, &recv, &d.unit_cost, &d.subtotal]).await {
             let _ = client.simple_query("ROLLBACK TRAN;").await; return Err(e.to_string());
         }
         
         if status == "Pagada" && recv > 0.0 {
-            let q_stock = "UPDATE product SET quantity = quantity + CAST(@P1 AS DECIMAL(10,3)) WHERE productId = @P2";
-            if let Err(e) = client.execute(q_stock, &[&recv, &d.product_id]).await {
+            let q_stock = "UPDATE product SET quantity = quantity + CAST(@P1 AS DECIMAL(10,3)) WHERE name = @P2";
+            if let Err(e) = client.execute(q_stock, &[&recv, &d.name]).await {
                 let _ = client.simple_query("ROLLBACK TRAN;").await; return Err(e.to_string());
             }
         }
@@ -104,25 +92,26 @@ pub async fn process_order(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, or
 
     if status == "Pagada" && register_cash > 0.0 {
         let neg_total = -register_cash; 
-        let q_sells = "
-            DECLARE @Out TABLE (id INT);
-            INSERT INTO sells (employeeId, sellsDate, cash, total) OUTPUT INSERTED.ventaId INTO @Out VALUES (@P1, GETDATE(), 1, @P2);
-            SELECT id FROM @Out;
-        ";
+        let q_sells = "DECLARE @Out TABLE (id INT); INSERT INTO sells (employeeId, sellsDate, cash, total) OUTPUT INSERTED.ventaId INTO @Out VALUES (@P1, GETDATE(), 1, @P2); SELECT id FROM @Out;";
         
+        // 1. Ejecutar consulta y consumir stream
         let v_res: Result<i32, String> = match client.query(q_sells, &[&emp_id, &neg_total]).await {
             Ok(stream) => {
                 match stream.into_row().await {
                     Ok(Some(row)) => Ok(row.get::<i32, _>(0).unwrap_or(0)),
-                    _ => Err("No ID".to_string()),
+                    _ => Err("No ID".into()),
                 }
             },
             Err(e) => Err(e.to_string()),
         };
 
+        // 2. Hacer rollback con client liberado
         let v_id = match v_res {
             Ok(id) => id,
-            Err(e) => { let _ = client.simple_query("ROLLBACK TRAN;").await; return Err(e); }
+            Err(e) => { 
+                let _ = client.simple_query("ROLLBACK TRAN;").await; 
+                return Err(e); 
+            }
         };
 
         let q_sdet = "INSERT INTO sells_detail (ventaId, productName, quantity, subtotal) VALUES (@P1, 'Egreso: Pago a Proveedor', 1, @P2)";
@@ -165,11 +154,18 @@ pub async fn get_orders(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>) -> Re
     Ok(list)
 }
 
-pub async fn get_order_details(pool: &Pool<ConnectionManager>, order_id: i32) -> Result<Vec<serde_json::Value>, String> {
+pub async fn get_order_details(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, order_id: i32) -> Result<Vec<serde_json::Value>, String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    
     let q = "
-        SELECT d.productId, p.name, CAST(d.expectedQty AS FLOAT) as exp, CAST(d.receivedQty AS FLOAT) as rec, CAST(d.unitCost AS FLOAT) as cost, CAST(d.subtotal AS FLOAT) as sub
-        FROM purchase_order_detail d JOIN product p ON d.productId = p.productId WHERE d.orderId = @P1
+        SELECT 
+            CAST(ABS(CHECKSUM(productName)) AS INT) as productId, 
+            productName as name, 
+            CAST(expectedQty AS FLOAT) as exp, 
+            CAST(receivedQty AS FLOAT) as rec, 
+            CAST(unitCost AS FLOAT) as cost, 
+            CAST(subtotal AS FLOAT) as sub
+        FROM purchase_order_detail WHERE orderId = @P1
     ";
     let rows = client.query(q, &[&order_id]).await.map_err(|e| e.to_string())?.into_first_result().await.unwrap_or_default();
     

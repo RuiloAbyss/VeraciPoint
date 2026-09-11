@@ -55,10 +55,15 @@ pub async fn create_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, n
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
     let query = "
         DECLARE @catId VARCHAR(36) = (SELECT TOP 1 categoryId FROM category WHERE name = @P1);
-        IF @catId IS NULL SET @catId = 'BIMBO'; 
+        IF @catId IS NULL SET @catId = 'ABARROTES'; 
+        
+        DECLARE @Out TABLE (id INT);
+
         INSERT INTO product (name, price, categoryId, barcode, sellformat, quantity, status, minStock, maxStock)
-        OUTPUT INSERTED.productId
+        OUTPUT INSERTED.productId INTO @Out
         VALUES (@P2, @P3, @catId, @P4, @P5, @P6, 1, @P7, @P8);
+
+        SELECT id FROM @Out;
     ";
     let stream = client.query(query, &[&category, &name, &price, &barcode, &sellformat, &quantity, &min_stock, &max_stock]).await.map_err(|e| e.to_string())?;
     let row = stream.into_row().await.map_err(|e| e.to_string())?.ok_or("Error obteniendo ID")?;

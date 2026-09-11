@@ -1,10 +1,9 @@
 use bb8::Pool;
 use bb8_tiberius::ConnectionManager;
 
-pub async fn open_turn(pool: &Pool<ConnectionManager>, employee_id: i32, start_money: f64) -> Result<i32, String> {
+pub async fn open_turn(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, employee_id: i32, start_money: f64) -> Result<i32, String> {
     let mut client = pool.get().await.map_err(|e| format!("Error de conexión: {}", e))?;
     
-    // 1. Verificar si ya hay un turno activo
     let check_query = "SELECT turnId FROM turnControl WHERE employeeId = @P1 AND endtime IS NULL";
     let stream = client.query(check_query, &[&employee_id]).await.map_err(|e| format!("Error validando turno: {}", e))?;
     
@@ -13,11 +12,14 @@ pub async fn open_turn(pool: &Pool<ConnectionManager>, employee_id: i32, start_m
         return Ok(active_turn_id);
     }
     
-    // 2. Insertar usando OUTPUT para que Tiberius reciba exactamente un i32
     let insert_query = "
+        DECLARE @Out TABLE (id INT);
+        
         INSERT INTO turnControl (employeeId, startmoney, totalsells)
-        OUTPUT INSERTED.turnId
+        OUTPUT INSERTED.turnId INTO @Out
         VALUES (@P1, CAST(@P2 AS DECIMAL(10,2)), 0);
+        
+        SELECT id FROM @Out;
     ";
     
     let stream = client.query(insert_query, &[&employee_id, &start_money]).await.map_err(|e| format!("Error al abrir caja: {}", e))?;
