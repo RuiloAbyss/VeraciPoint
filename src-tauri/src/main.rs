@@ -139,6 +139,9 @@ fn main() {
             commands::order_commands::toggle_provider,
             commands::order_commands::edit_provider,
 
+            commands::report_commands::register_manual_event,
+            commands::report_commands::fetch_reports
+
 
         ])
         .run(tauri::generate_context!())

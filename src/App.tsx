@@ -10,6 +10,7 @@ import { Sells } from "./pages/action/Sells";
 import { History } from "./pages/action/History";
 import { Staff } from "./pages/action/Staff";
 import { Orders } from "./pages/action/Orders";
+import { Reports } from "./pages/action/Reports";
 import { ErrorBoundary } from "./components/ErrorBoundary"; 
 
 const PlaceholderView = ({ title }: { title: string }) => (
@@ -34,6 +35,7 @@ function AnimatedRoutes() {
         <Route path="/history" element={<History />} />
         <Route path="/staff" element={<Staff />} />
         <Route path="/orders" element={<Orders />} />
+        <Route path="/reports" element={<Reports />} />
         <Route path="*" element={<PlaceholderView title="404 - Page Not Found" />} />
 
       </Routes>
