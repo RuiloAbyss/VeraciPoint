@@ -24,7 +24,7 @@ pub async fn update_order_status(order_id: i32, emp_id: i32, status: String, met
 
 #[tauri::command]
 pub async fn fetch_providers(state: tauri::State<'_, crate::DbState>) -> Result<Vec<serde_json::Value>, String> {
-    crate::services::order_service::get_providers(&state.pool).await
+    crate::services::order_service::fetch_providers(&state.pool).await
 }
 
 #[tauri::command]

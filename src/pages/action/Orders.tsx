@@ -258,8 +258,8 @@ export function Orders() {
   const handleSaveProvider = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = providerModal.name.trim();
-    const cleanDesc = providerModal.description.trim() || null;
-    const cleanCell = providerModal.cellphone.trim() || null;
+    const cleanDesc = providerModal.description.trim() || "";
+    const cleanCell = providerModal.cellphone.trim() || "";
     if (!cleanName) return;
     
     setLoading(true);
@@ -327,33 +327,49 @@ export function Orders() {
                       </label>
                       {selectedProviderObj && (
                           <div className="flex gap-2">
-                              <button 
-                                  onClick={() => setProviderModal({ isOpen: true, id: selectedProviderObj.id, name: selectedProviderObj.name, originalName: selectedProviderObj.name, description: selectedProviderObj.description || "", cellphone: selectedProviderObj.cellphone || "" })} 
-                                  className="text-[10px] font-bold px-2 py-1 rounded transition-colors cursor-pointer bg-white text-blue-600 border border-gray-200 hover:border-blue-200 hover:text-blue-700 shadow-sm uppercase tracking-wider"
-                              >
-                                  ✏️ Editar
-                              </button>
-                              <button 
-                                  onClick={() => handleToggleProviderStatus(selectedProviderObj.name, selectedProviderObj.status)} 
-                                  className={`text-[10px] font-bold px-2 py-1 rounded transition-colors cursor-pointer uppercase tracking-wider bg-white border border-gray-200 shadow-sm ${selectedProviderObj.status ? 'text-red-500 hover:border-red-200 hover:text-red-600' : 'text-green-600 hover:border-green-200 hover:text-green-700'}`}
-                              >
-                                  {selectedProviderObj.status ? '👁️ Ocultar' : '👁️‍🗨️ Activar'}
-                              </button>
-                          </div>
+                            <button 
+                                onClick={() => setProviderModal({ isOpen: true, id: selectedProviderObj.id, name: selectedProviderObj.name, originalName: selectedProviderObj.name, description: selectedProviderObj.description || "", cellphone: selectedProviderObj.cellphone || "" })} 
+                                className="rounded-lg px-3 py-1.5 text-xs font-bold shadow-sm bg-white border border-gray-300 text-gray-700 hover:ring-2 hover:ring-gray-400 cursor-pointer transition-all"
+                            >
+                                Editar
+                            </button>
+                            <button 
+                                onClick={() => handleToggleProviderStatus(selectedProviderObj.name, selectedProviderObj.status)} 
+                                className={`rounded-lg px-3 py-1.5 text-xs font-bold shadow-sm cursor-pointer transition-all bg-white border ${
+                                    selectedProviderObj.status 
+                                    ? 'border-red-200 text-red-600 hover:ring-2 hover:ring-red-400' 
+                                    : 'border-green-200 text-green-600 hover:ring-2 hover:ring-green-400'
+                                }`}
+                            >
+                                {selectedProviderObj.status ? 'Ocultar' : 'Activar'}
+                            </button>
+                        </div>
                       )}
                   </div>
               )}
 
               <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2">
                 {visibleProviders.map(p => (
-                  <button key={p.id} onClick={() => { setSelectedProvider(p.name); setCart([]); setCartTotal(""); }} className={`w-full text-left p-3 rounded-xl border transition-colors cursor-pointer flex justify-between items-center ${selectedProvider === p.name ? 'bg-primary/10 border-primary text-primary font-bold shadow-sm' : 'bg-gray-50 border-gray-200 hover:border-primary/50 text-gray-700'}`}>
-                      <span className={`font-bold truncate ${!p.status ? 'text-gray-400 line-through' : ''}`}>{p.name}</span>
-                      <span className="text-[10px] bg-white px-2 py-0.5 rounded-md border border-gray-200 shadow-sm text-gray-900 shrink-0 uppercase font-bold">{products.filter(pr => pr.category === p.name).length} Prod</span>
+                  <button 
+                    key={p.id} 
+                    onClick={() => { setSelectedProvider(p.name); setCart([]); setCartTotal(""); }} 
+                    className={`w-full text-left p-3 rounded-xl border transition-colors cursor-pointer flex flex-col gap-2 ${selectedProvider === p.name ? 'bg-primary/10 border-primary shadow-sm' : 'bg-gray-50 border-gray-200 hover:border-primary/50 text-gray-700'}`}
+                  >
+                      <div className="flex justify-between items-start w-full">
+                          <span className={`font-bold truncate ${!p.status ? 'text-gray-400 line-through' : selectedProvider === p.name ? 'text-primary' : 'text-gray-900'}`}>{p.name}</span>
+                          <span className="text-[10px] bg-white px-2 py-0.5 rounded-md border border-gray-200 shadow-sm text-gray-900 shrink-0 uppercase font-bold">{products.filter(pr => pr.category === p.name).length} Prod</span>
+                      </div>
+                      {(p.cellphone || p.description) && (
+                          <div className="text-xs text-gray-500 flex flex-col gap-1 mt-1 border-t border-gray-200/60 pt-2">
+                              {p.cellphone && <span className="font-medium text-gray-700">📞 {p.cellphone}</span>}
+                              {p.description && <span className="line-clamp-2 leading-relaxed opacity-90">{p.description}</span>}
+                          </div>
+                      )}
                   </button>
                 ))}
               </div>
             </section>
-            //TODO: Corregir cards de provider con mayor información, asegurar que los datos extra se guardan correctamente.
+            
             <section className="flex-col flex-1 rounded-2xl bg-white border border-gray-200 p-4 shadow-sm overflow-hidden flex relative">
               {!selectedProviderObj ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-gray-400"><span className="text-4xl mb-2">📦</span><p className="font-bold">Selecciona un proveedor para ver su catálogo</p></div>
@@ -377,20 +393,32 @@ export function Orders() {
 
                   <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 mb-4 grid grid-cols-1 md:grid-cols-2 gap-2 content-start">
                     {providerProducts.map(p => {
-                      const salesInfo = sales30Days.find(s => s.name === p.name);
-                      const isAdded = cart.some(c => c.productId === p.id);
-                      return (
-                        <div key={p.id} className={`p-3 rounded-xl border flex flex-col justify-between gap-2 transition-colors ${isAdded ? 'border-primary bg-primary/5' : 'border-gray-200 bg-gray-50'}`}>
-                          <div>
-                            <div className="flex justify-between items-start"><p className="font-bold text-sm text-gray-900 truncate">{p.name}</p><span className="text-[10px] font-extrabold text-gray-500">Stock: {p.stock} {p.maxStock && `/ ${p.maxStock}`}</span></div>
-                            <p className="text-[10px] text-gray-500 font-bold uppercase mt-1">Ventas 30D: <span className={salesInfo ? 'text-green-600' : 'text-gray-400'}>{salesInfo ? salesInfo.quantity : 0} U</span></p>
-                          </div>
-                          <button disabled={isAdded} onClick={() => handleAddToCart(p)} className={`w-full py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer ${isAdded ? 'bg-primary text-white cursor-default' : 'bg-white border border-gray-300 text-gray-700 hover:border-primary hover:text-primary'}`}>
-                            {isAdded ? 'En Pedido ✅' : 'Añadir a Pedido'}
-                          </button>
-                        </div>
-                      )
-                    })}
+  const salesInfo = sales30Days.find(s => s.name === p.name);
+  const isAdded = cart.some(c => c.productId === p.id);
+  
+  const formatStr = p.sellformat?.toLowerCase() || '';
+  const isGranel = formatStr.includes('granel') || formatStr.includes('kg') || formatStr.includes('kilo');
+  const unitLabel = isGranel ? 'kg' : 'uni';
+
+  return (
+    <div key={p.id} className={`p-3 rounded-xl border flex flex-col justify-between gap-2 transition-colors ${isAdded ? 'border-primary bg-primary/5' : 'border-gray-200 bg-gray-50'}`}>
+      <div>
+        <div className="flex justify-between items-start">
+          <p className="font-bold text-sm text-gray-900 truncate pr-2">{p.name}</p>
+          <span className="text-[10px] font-extrabold text-gray-500 whitespace-nowrap">
+            Cantidad: {p.stock} {unitLabel}{p.maxStock ? ` / ${p.maxStock} ${unitLabel}` : ''}
+          </span>
+        </div>
+        <p className="text-[10px] text-gray-500 font-bold uppercase mt-1">
+          Ventas Mensuales: <span className={salesInfo ? 'text-green-600' : 'text-gray-400'}>{salesInfo ? salesInfo.quantity : 0} {unitLabel.toUpperCase()}</span>
+        </p>
+      </div>
+      <button disabled={isAdded} onClick={() => handleAddToCart(p)} className={`w-full py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer ${isAdded ? 'bg-primary text-white cursor-default' : 'bg-white border border-gray-300 text-gray-700 hover:border-primary hover:text-primary'}`}>
+        {isAdded ? 'En Pedido ✅' : 'Añadir a Pedido'}
+      </button>
+    </div>
+  )
+})}
                   </div>
                   {cart.length > 0 && (
                     <div className="border-t border-gray-200 pt-4 shrink-0 bg-white">

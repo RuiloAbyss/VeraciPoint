@@ -187,23 +187,6 @@ pub async fn get_order_details(pool: &Pool<ConnectionManager>, order_id: i32) ->
     Ok(list)
 }
 
-
-pub async fn get_providers(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>) -> Result<Vec<serde_json::Value>, String> {
-    let mut client = pool.get().await.map_err(|e| e.to_string())?;
-    let query = "SELECT categoryId, name, CAST(ISNULL(status, 1) AS BIT) as status FROM category WHERE name NOT IN ('Ofertas', 'Categoría') ORDER BY name";
-    let rows = client.simple_query(query).await.map_err(|e| e.to_string())?.into_first_result().await.unwrap_or_default();
-    
-    let mut list = Vec::new();
-    for r in rows {
-        list.push(serde_json::json!({
-            "id": r.get::<&str, _>("categoryId").unwrap_or(""),
-            "name": r.get::<&str, _>("name").unwrap_or(""),
-            "status": r.get::<bool, _>("status").unwrap_or(true)
-        }));
-    }
-    Ok(list)
-}
-
 pub async fn fetch_providers(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>) -> Result<Vec<serde_json::Value>, String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
     let query = "SELECT categoryId, name, description, cellphone, CAST(ISNULL(status, 1) AS BIT) as status FROM category WHERE name NOT IN ('Ofertas', 'Categoría') ORDER BY name";
