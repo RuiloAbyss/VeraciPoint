@@ -236,7 +236,7 @@ export function Sells() {
   };
 
   return (
-    <motion.div className="absolute inset-0 flex flex-col p-2 sm:p-4 lg:p-5 gap-3 text-gray-900 z-20 bg-gray-50/50" initial={{ x: "100%" }} animate={{ x: "0%" }} exit={{ x: "100%" }} transition={{ duration: 0.28 }}>
+    <motion.div className="absolute inset-0 flex flex-col p-2 sm:p-4 lg:p-5 gap-3 text-on-bg z-20 bg-gray-50/50" initial={{ x: "100%" }} animate={{ x: "0%" }} exit={{x: "100%" }} transition={{ duration: 0.28 }}>
       
       <header className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-4 py-3 shadow-sm shrink-0 flex-wrap gap-2">
         <div className="flex items-center gap-3">
@@ -253,7 +253,7 @@ export function Sells() {
         
         <div className="flex flex-col flex-1 min-w-[120px] gap-2 lg:gap-3 min-h-0">
             <div className="flex flex-col xl:flex-row items-center gap-2 rounded-xl bg-white border border-gray-200 p-2 shadow-sm shrink-0">
-                <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyDown={handleSearchKeyDown} placeholder="🔍 Buscar..." autoFocus className="w-full rounded-lg bg-gray-50 px-3 py-2 text-sm outline-none border border-gray-200 focus:border-primary transition-colors" />
+                <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyDown={handleSearchKeyDown} placeholder="🔍 Buscar..." className="w-full rounded-lg bg-gray-50 px-3 py-2 text-sm outline-none border border-gray-200 focus:border-primary transition-colors" />
                 
                 <div className="relative w-full xl:w-1/3" ref={categoryDropdownRef}>
                   <button

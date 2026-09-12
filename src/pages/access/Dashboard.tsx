@@ -14,6 +14,7 @@ interface UserSession {
   isManagementMode?: boolean;
 }
 
+// --- SECCIÓN DE PROMOCIONES (BARRA INFERIOR DE PROGRESO) ---
 const PromoSection = ({ isAdmin, navigate }: { isAdmin: boolean; navigate: ReturnType<typeof useNavigate> }) => {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -41,6 +42,7 @@ const PromoSection = ({ isAdmin, navigate }: { isAdmin: boolean; navigate: Retur
   return (
     <section className="flex flex-1 flex-col items-center justify-center rounded-3xl border border-gray-300/60 bg-gray-100/85 p-0 text-center shadow-md relative overflow-hidden select-none backdrop-blur-md min-h-[200px] group">
       
+      {/* Botón Ultra Compacto para Gestor de Banners */}
       {isAdmin && (
         <button
           onClick={() => navigate("/banners")}
@@ -51,22 +53,16 @@ const PromoSection = ({ isAdmin, navigate }: { isAdmin: boolean; navigate: Retur
         </button>
       )}
 
+      {/* BARRA DE PROGRESO INFERIOR CONTINUA */}
       {banners.length > 1 && (
-        <div className="absolute top-0 left-0 w-full flex gap-1.5 px-4 pt-3 z-30">
-          {banners.map((_, idx) => (
-            <div key={idx} className="flex-1 h-1.5 bg-black/30 rounded-full overflow-hidden relative shadow-sm backdrop-blur-sm">
-              {idx < currentIndex && <div className="absolute inset-0 bg-white w-full" />}
-              {idx === currentIndex && (
-                <motion.div
-                  key={currentIndex}
-                  initial={{ width: 0 }}
-                  animate={{ width: "100%" }}
-                  transition={{ duration: 20, ease: "linear" }}
-                  className="absolute inset-0 bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]"
-                />
-              )}
-            </div>
-          ))}
+        <div className="absolute bottom-0 left-0 w-full h-1.5 bg-black/30 z-30">
+          <motion.div
+            key={currentIndex} // Fuerza el reinicio de la animación con cada imagen
+            initial={{ width: "0%" }}
+            animate={{ width: "100%" }}
+            transition={{ duration: 20, ease: "linear" }}
+            className="h-full bg-white/90 shadow-[0_0_8px_rgba(255,255,255,0.8)]"
+          />
         </div>
       )}
 
@@ -118,6 +114,7 @@ export function Dashboard() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [toast, setToast] = useState<{ msg: string, type: 'success' | 'error' | 'info' } | null>(null);
 
+  // PAGINACIÓN DE ACCIONES
   const [actionOffset, setActionOffset] = useState(0);
   const ACTIONS_PER_PAGE = 3;
 
@@ -238,15 +235,16 @@ export function Dashboard() {
     navigate(route);
   };
 
+  // Filtrar acciones disponibles y aplicar paginación
   const allowedActions = allMenuActions.filter((a) => session.isAdmin || !a.adminOnly);
   const visibleActions = allowedActions.slice(actionOffset, actionOffset + ACTIONS_PER_PAGE);
 
   return (
     <motion.div
       className="absolute inset-0 flex flex-col justify-between p-3 sm:p-4 lg:p-5 gap-5 text-gray-900 z-10 bg-gray-50/50"
-      initial={{ x: "100%" }}
+      initial={{ x: "-100%" }}
       animate={{ x: "0%" }}
-      exit={{ x: "100%" }}
+      exit={{ x: "-100%" }}
       transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
     >
       <header className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-5 py-3 shadow-sm shrink-0 flex-wrap gap-4">
@@ -298,7 +296,8 @@ export function Dashboard() {
 
       <div className="flex flex-col lg:flex-row gap-5 flex-1 min-h-0">
         
-        <section className="flex flex-col gap-3 w-full lg:w-[280px] shrink-0 h-full relative">
+        {/* COLUMNA IZQUIERDA: ACCIONES ESTIRADAS PARA OCUPAR EL ALTO TOTAL */}
+        <section className="flex flex-col gap-2 w-full lg:w-[280px] shrink-0 h-full relative">
           
           {actionOffset > 0 && (
             <button 
@@ -309,7 +308,7 @@ export function Dashboard() {
             </button>
           )}
 
-          <div className="flex flex-col gap-3 flex-1 overflow-hidden relative">
+          <div className="flex flex-col gap-3 flex-1 overflow-hidden relative p-2 -m-2">
             <AnimatePresence mode="popLayout">
               {visibleActions.map(({ route, adminOnly, ...cardProps }) => (
                 <motion.div
@@ -320,6 +319,7 @@ export function Dashboard() {
                   transition={{ duration: 0.2 }}
                   className="flex-1 flex flex-col min-h-0"
                 >
+                  {/* El contenedor interior fuerza al ActionCard a expandirse en altura */}
                   <div className="flex-1 w-full [&>*]:!h-full [&>*]:!flex [&>*]:!flex-col [&>*]:!justify-center shadow-sm rounded-2xl">
                     <ActionCard
                       {...cardProps}
@@ -341,9 +341,11 @@ export function Dashboard() {
           )}
         </section>
 
+        {/* COLUMNA DERECHA: PROMOCIONES */}
         <PromoSection isAdmin={session.isAdmin} navigate={navigate} />
       </div>
 
+      {/* Modal Obligatorio Apertura de Caja */}
       <AnimatePresence>
         {isTurnModalOpen && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -392,6 +394,7 @@ export function Dashboard() {
         )}
       </AnimatePresence>
 
+      {/* Modal de Cierre de Caja */}
       <AnimatePresence>
         {isCloseTurnModalOpen && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
