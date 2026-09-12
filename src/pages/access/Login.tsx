@@ -54,7 +54,7 @@ export function Login() {
     
     localStorage.removeItem("userSession");
     setHasError(false);
-    setLoading(true); // <-- Mostramos overlay global
+    setLoading(true); 
 
     try {
       const userSession = await invoke<AuthResponse>("authenticate", { 
@@ -67,7 +67,7 @@ export function Login() {
     } catch (err) {
       setHasError(true);
     } finally {
-      setLoading(false); // <-- Ocultamos overlay
+      setLoading(false); 
     }
   };
 
@@ -86,9 +86,13 @@ export function Login() {
   const isFormDisabled = dbStatus !== "active" || isLoading || hasError;
 
   return (
-    <div
-      className="flex min-h-screen w-full items-center justify-center bg-cover bg-center bg-no-repeat p-4 lg:justify-start lg:p-0 relative"
+    <motion.div
+      className="absolute inset-0 z-20 flex min-h-screen w-full items-center justify-center bg-cover bg-center bg-no-repeat p-4 lg:justify-start lg:p-0"
       style={{ backgroundImage: `url(${bgImage})` }}
+      initial={{ x: "100%" }}
+      animate={{ x: "0%" }}
+      exit={{ x: "100%" }}
+      transition={{ duration: 0.28 }}
     >
       <div className="flex w-full max-w-sm flex-col justify-between rounded-3xl border border-white/30 bg-surface-1/75 p-6 shadow-2xl backdrop-blur-md transition-all duration-300 sm:max-w-md lg:h-screen lg:w-1/3 lg:max-w-none lg:rounded-none lg:border-y-0 lg:border-l-0 lg:border-r lg:border-white/20 lg:bg-surface-1/95 lg:p-12 lg:backdrop-blur-[2px]">
         
@@ -161,6 +165,6 @@ export function Login() {
           {ledConfig[dbStatus].text}
         </span>
       </div>
-    </div>
+    </motion.div>
   );
 }
