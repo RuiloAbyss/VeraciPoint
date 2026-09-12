@@ -112,7 +112,7 @@ export function Banners() {
   };
 
   return (
-    <motion.div className="absolute inset-0 flex flex-col p-2 sm:p-4 lg:p-5 gap-3 text-gray-900 z-20 bg-gray-50/50 backdrop-blur-sm" initial={{ y: "100%" }} animate={{ y: "0%" }} exit={{ y: "100%" }} transition={{ duration: 0.28 }}>
+    <motion.div className="absolute inset-0 flex flex-col p-2 sm:p-4 lg:p-5 gap-3 text-gray-900 z-20 bg-gray-50/50 backdrop-blur-sm" initial={{ x: "100%" }} animate={{ x: "0%" }} exit={{ x: "100%" }} transition={{ duration: 0.28 }}>
       
       <header className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-4 py-3 shadow-sm shrink-0 flex-wrap gap-4">
         <div className="flex items-center gap-3">
@@ -145,30 +145,31 @@ export function Banners() {
                 <div className="grid grid-cols-2 gap-3">
                     <div>
                         <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Fecha Inicio</label>
-                        <input required type="date" value={newStart} onChange={e => setNewStart(e.target.value)} className="w-full bg-white border border-gray-200 rounded-lg px-2 py-2.5 text-xs outline-none focus:border-primary font-bold mt-1 transition-colors cursor-pointer" />
+                        <input required type="date" value={newStart} onChange={e => setNewStart(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-2 py-2.5 text-xs outline-none focus:border-primary font-bold mt-1 transition-colors cursor-pointer" />
                     </div>
                     <div>
                         <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Fecha Fin</label>
-                        <input required type="date" value={newEnd} onChange={e => setNewEnd(e.target.value)} className="w-full bg-white border border-gray-200 rounded-lg px-2 py-2.5 text-xs outline-none focus:border-primary font-bold mt-1 transition-colors cursor-pointer" />
+                        <input required type="date" value={newEnd} onChange={e => setNewEnd(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-2 py-2.5 text-xs outline-none focus:border-primary font-bold mt-1 transition-colors cursor-pointer" />
                     </div>
                 </div>
                 
                 <div>
                     <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
-                        Fotografía (Aspecto 16:9) {editingId && <span className="text-orange-500 ml-1">(Opcional)</span>}
+                        Fotografía (Panorámica 16:9) {editingId && <span className="text-orange-500 ml-1">(Opcional)</span>}
                     </label>
-                    <div className="mt-1 border-2 border-dashed border-gray-200 rounded-xl bg-white p-4 text-center hover:border-primary/50 transition-colors">
+                    <div className="mt-1 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50 p-4 text-center hover:border-primary/50 transition-colors">
                         <input required={!editingId} type="file" accept="image/*" onChange={handleImageUpload} className="w-full text-xs font-bold file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-[10px] file:uppercase file:font-extrabold file:bg-primary file:text-white hover:file:bg-primary/90 cursor-pointer" />
                     </div>
                 </div>
                 
+                {/* PREVIEW EN FORMATO PANORÁMICO EXACTO AL DASHBOARD */}
                 {(newPhoto || existingPhoto) && (
                     <motion.img 
                         initial={{ opacity: 0, scale: 0.9 }} 
                         animate={{ opacity: 1, scale: 1 }} 
                         src={`data:image/jpeg;base64,${newPhoto || existingPhoto}`} 
                         alt="Preview" 
-                        className="w-full h-32 object-cover rounded-xl border border-gray-200 shadow-sm" 
+                        className="w-full aspect-[21/9] object-cover object-center rounded-xl border border-gray-200 shadow-sm" 
                     />
                 )}
                 
@@ -196,8 +197,10 @@ export function Banners() {
                     
                     return (
                     <div key={b.id} className={`rounded-2xl border p-2 flex flex-col gap-2 relative transition-all shadow-sm ${isCurrent ? 'border-green-400 bg-green-50/50' : 'border-gray-200 bg-gray-50 hover:border-gray-300'}`}>
-                        <div className="relative rounded-xl overflow-hidden bg-gray-200 h-32">
-                            <img src={`data:image/jpeg;base64,${b.photo}`} alt={b.title} className="w-full h-full object-cover" />
+                        
+                        {/* MINIATURA EN FORMATO PANORÁMICO */}
+                        <div className="relative rounded-xl overflow-hidden bg-gray-200 aspect-[21/9]">
+                            <img src={`data:image/jpeg;base64,${b.photo}`} alt={b.title} className="w-full h-full object-cover object-center" />
                             {isCurrent && <span className="absolute top-2 left-2 bg-green-500 text-white text-[9px] font-extrabold uppercase tracking-widest px-2 py-1 rounded shadow-sm">Activo</span>}
                         </div>
                         

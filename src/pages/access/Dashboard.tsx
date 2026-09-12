@@ -14,7 +14,6 @@ interface UserSession {
   isManagementMode?: boolean;
 }
 
-// --- SECCIÓN DE PROMOCIONES (REEL / FOTO ESTÁTICA) ---
 const PromoSection = ({ isAdmin, navigate }: { isAdmin: boolean; navigate: ReturnType<typeof useNavigate> }) => {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -22,7 +21,7 @@ const PromoSection = ({ isAdmin, navigate }: { isAdmin: boolean; navigate: Retur
   useEffect(() => {
     const load = async () => {
       try {
-        const data = await fetchBanners(true); // Solo banners vigentes
+        const data = await fetchBanners(true); 
         setBanners(Array.isArray(data) ? data : []);
       } catch (e) {
         console.error("Error cargando banners", e);
@@ -31,7 +30,6 @@ const PromoSection = ({ isAdmin, navigate }: { isAdmin: boolean; navigate: Retur
     load();
   }, []);
 
-  // Control del carrusel: cambia cada 20 segundos solo si hay 2 o más
   useEffect(() => {
     if (banners.length <= 1) return;
     const interval = setInterval(() => {
@@ -43,7 +41,6 @@ const PromoSection = ({ isAdmin, navigate }: { isAdmin: boolean; navigate: Retur
   return (
     <section className="flex flex-1 flex-col items-center justify-center rounded-3xl border border-gray-300/60 bg-gray-100/85 p-0 text-center shadow-md relative overflow-hidden select-none backdrop-blur-md min-h-[200px] group">
       
-      {/* Botón Ultra Compacto para Gestor de Banners */}
       {isAdmin && (
         <button
           onClick={() => navigate("/banners")}
@@ -54,15 +51,34 @@ const PromoSection = ({ isAdmin, navigate }: { isAdmin: boolean; navigate: Retur
         </button>
       )}
 
+      {banners.length > 1 && (
+        <div className="absolute top-0 left-0 w-full flex gap-1.5 px-4 pt-3 z-30">
+          {banners.map((_, idx) => (
+            <div key={idx} className="flex-1 h-1.5 bg-black/30 rounded-full overflow-hidden relative shadow-sm backdrop-blur-sm">
+              {idx < currentIndex && <div className="absolute inset-0 bg-white w-full" />}
+              {idx === currentIndex && (
+                <motion.div
+                  key={currentIndex}
+                  initial={{ width: 0 }}
+                  animate={{ width: "100%" }}
+                  transition={{ duration: 20, ease: "linear" }}
+                  className="absolute inset-0 bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)]"
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       {banners.length > 0 ? (
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
           <motion.img
             key={currentIndex}
             src={`data:image/jpeg;base64,${banners[currentIndex].photo}`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 1.2 }}
+            transition={{ duration: 0.8 }}
             className="absolute inset-0 w-full h-full object-cover"
             alt="Promoción Activa"
           />
@@ -77,15 +93,6 @@ const PromoSection = ({ isAdmin, navigate }: { isAdmin: boolean; navigate: Retur
           <p className="mt-1 text-xs text-gray-500 max-w-sm">
             Aquí se proyectarán ofertas especiales, listas de precios y avisos de temporada.
           </p>
-        </div>
-      )}
-      
-      {/* Puntos Indicadores (Solo si hay más de 1) */}
-      {banners.length > 1 && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-md z-20">
-            {banners.map((_, idx) => (
-                <div key={idx} className={`w-2 h-2 rounded-full transition-all ${idx === currentIndex ? 'bg-white scale-125' : 'bg-white/50'}`} />
-            ))}
         </div>
       )}
     </section>
@@ -110,6 +117,9 @@ export function Dashboard() {
   const [endMoney, setEndMoney] = useState<number | "">("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [toast, setToast] = useState<{ msg: string, type: 'success' | 'error' | 'info' } | null>(null);
+
+  const [actionOffset, setActionOffset] = useState(0);
+  const ACTIONS_PER_PAGE = 3;
 
   const showToast = (msg: string, type: 'success' | 'error' | 'info') => {
     setToast({ msg, type });
@@ -210,14 +220,13 @@ export function Dashboard() {
     navigate("/login");
   };
 
-  // El menú ahora tiene 6 tarjetas perfectas para la vista de Administrador
-  const menuActions: (Omit<ActionCardProps, "onClick"> & { route: string; adminOnly?: boolean })[] = [
+  const allMenuActions: (Omit<ActionCardProps, "onClick"> & { route: string; adminOnly?: boolean })[] = [
     { id: "ventas", title: "Realizar Ventas", description: "Cobro ágil en caja", iconBg: "bg-primary/20 text-primary", icon: "🛒", route: "/sells", adminOnly: false },
     { id: "inventario", title: "Control de Inventario", description: "Altas y existencias", iconBg: "bg-secondary/30 text-secondary", icon: "📦", route: "/inventory", adminOnly: false },
     { id: "pedidos", title: "Orden de Pedido", description: "Solicitar mercancía", iconBg: "bg-blue-500/20 text-blue-600", icon: "📋", route: "/orders", adminOnly: false },
     { id: "historial", title: "Historial de Ventas", description: "Tickets previos", iconBg: "bg-tertiary/25 text-tertiary", icon: "📄", route: "/history", adminOnly: true },
     { id: "personal", title: "Control de Personal", description: "Horarios y permisos", iconBg: "bg-gray-200 text-gray-700", icon: "👥", route: "/staff", adminOnly: true },
-    { id: "reportes", title: "Auditoría", description: "Visor de eventos", iconBg: "bg-secondary/30 text-secondary", icon: "📊", route: "/reports", adminOnly: true },
+    { id: "reportes", title: "Auditoría", description: "Visor de eventos", iconBg: "bg-orange-500/20 text-orange-600", icon: "📊", route: "/reports", adminOnly: true },
   ];
 
   const handleNavigation = (route: string, id: string) => {
@@ -229,12 +238,15 @@ export function Dashboard() {
     navigate(route);
   };
 
+  const allowedActions = allMenuActions.filter((a) => session.isAdmin || !a.adminOnly);
+  const visibleActions = allowedActions.slice(actionOffset, actionOffset + ACTIONS_PER_PAGE);
+
   return (
     <motion.div
       className="absolute inset-0 flex flex-col justify-between p-3 sm:p-4 lg:p-5 gap-5 text-gray-900 z-10 bg-gray-50/50"
-      initial={{ y: "-100%" }}
-      animate={{ y: "0%" }}
-      exit={{ y: "-100%" }}
+      initial={{ x: "100%" }}
+      animate={{ x: "0%" }}
+      exit={{ x: "100%" }}
       transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
     >
       <header className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-5 py-3 shadow-sm shrink-0 flex-wrap gap-4">
@@ -284,42 +296,54 @@ export function Dashboard() {
         </div>
       </header>
 
-      {session.isAdmin ? (
-        <>
-          <PromoSection isAdmin={session.isAdmin} navigate={navigate} />
-          <section className="w-full shrink-0 mt-2">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-              {menuActions.map(({ route, adminOnly, ...cardProps }) => (
-                <ActionCard
+      <div className="flex flex-col lg:flex-row gap-5 flex-1 min-h-0">
+        
+        <section className="flex flex-col gap-3 w-full lg:w-[280px] shrink-0 h-full relative">
+          
+          {actionOffset > 0 && (
+            <button 
+              onClick={() => setActionOffset(p => Math.max(0, p - ACTIONS_PER_PAGE))} 
+              className="w-full py-2 bg-white border border-gray-200 rounded-xl shadow-sm text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors cursor-pointer shrink-0 flex justify-center items-center gap-2"
+            >
+              <span className="text-[10px] font-extrabold tracking-widest uppercase">▲ Mostrar Anteriores</span>
+            </button>
+          )}
+
+          <div className="flex flex-col gap-3 flex-1 overflow-hidden relative">
+            <AnimatePresence mode="popLayout">
+              {visibleActions.map(({ route, adminOnly, ...cardProps }) => (
+                <motion.div
                   key={cardProps.id}
-                  {...cardProps}
-                  onClick={() => handleNavigation(route, cardProps.id)}
-                />
-              ))}
-            </div>
-          </section>
-        </>
-      ) : (
-        <>
-          <div className="flex flex-col lg:flex-row gap-5 flex-1 min-h-0">
-            <section className="flex flex-col gap-4 w-full lg:w-[280px] shrink-0 h-full">
-              <div className="flex flex-col gap-4 flex-1 overflow-hidden pr-1 pb-1">
-                {menuActions.filter((a) => !a.adminOnly).map(({ route, adminOnly, ...cardProps }) => (
-                  <div key={cardProps.id} className="flex-1 flex">
+                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex-1 flex flex-col min-h-0"
+                >
+                  <div className="flex-1 w-full [&>*]:!h-full [&>*]:!flex [&>*]:!flex-col [&>*]:!justify-center shadow-sm rounded-2xl">
                     <ActionCard
                       {...cardProps}
                       onClick={() => handleNavigation(route, cardProps.id)}
                     />
                   </div>
-                ))}
-              </div>
-            </section>
-            <PromoSection isAdmin={session.isAdmin} navigate={navigate} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
-        </>
-      )}
 
-      {/* Modal Obligatorio Apertura de Caja */}
+          {actionOffset + ACTIONS_PER_PAGE < allowedActions.length && (
+            <button 
+              onClick={() => setActionOffset(p => p + ACTIONS_PER_PAGE)} 
+              className="w-full py-2 bg-white border border-gray-200 rounded-xl shadow-sm text-gray-400 hover:text-primary hover:bg-primary/5 transition-colors cursor-pointer shrink-0 flex justify-center items-center gap-2"
+            >
+              <span className="text-[10px] font-extrabold tracking-widest uppercase">▼ Mostrar Siguientes</span>
+            </button>
+          )}
+        </section>
+
+        <PromoSection isAdmin={session.isAdmin} navigate={navigate} />
+      </div>
+
       <AnimatePresence>
         {isTurnModalOpen && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -368,7 +392,6 @@ export function Dashboard() {
         )}
       </AnimatePresence>
 
-      {/* Modal de Cierre de Caja */}
       <AnimatePresence>
         {isCloseTurnModalOpen && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">

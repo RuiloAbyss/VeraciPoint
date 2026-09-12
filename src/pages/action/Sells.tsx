@@ -26,12 +26,16 @@ export function Sells() {
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("Categoría");
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [isCash, setIsCash] = useState(true);
   const [toast, setToast] = useState<{ msg: string, type: 'success' | 'error' | 'info' } | null>(null);
 
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Estados del Modal de Checkout
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+  const [isCash, setIsCash] = useState(true);
+  const [amountReceived, setAmountReceived] = useState<string>("");
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 30; 
@@ -178,15 +182,21 @@ export function Sells() {
     if (cart.length === 0 || employeeId === 0) return;
     setLoading(true); 
     try {
+      const multiplier = isCash ? 1 : 1.04;
+      const finalTotal = cartTotal * multiplier;
+
       const details: SaleDetailInput[] = cart.map(item => ({
         productName: item.product.name,
         quantity: Number(item.quantity) || 0,
-        subtotal: (Number(item.quantity) || 0) * (Number(item.finalPrice) || 0)
+        subtotal: ((Number(item.quantity) || 0) * (Number(item.finalPrice) || 0)) * multiplier
       }));
 
-      await registerSale(employeeId, isCash, cartTotal, details);
+      await registerSale(employeeId, isCash, finalTotal, details);
       showToast("Venta registrada exitosamente", "success");
       setCart([]);
+      setIsCheckoutModalOpen(false);
+      setAmountReceived("");
+      setIsCash(true);
       await loadData(); 
     } catch (error: any) {
       const errorMessage = error?.response?.data?.message || error?.message || "Error desconocido";
@@ -226,7 +236,7 @@ export function Sells() {
   };
 
   return (
-    <motion.div className="absolute inset-0 flex flex-col p-2 sm:p-4 lg:p-5 gap-2 lg:gap-3 text-gray-900 z-20 bg-gray-50/50" initial={{ y: "100%" }} animate={{ y: "0%" }} exit={{ y: "100%" }} transition={{ duration: 0.28 }}>
+    <motion.div className="absolute inset-0 flex flex-col p-2 sm:p-4 lg:p-5 gap-3 text-gray-900 z-20 bg-gray-50/50" initial={{ x: "100%" }} animate={{ x: "0%" }} exit={{ x: "100%" }} transition={{ duration: 0.28 }}>
       
       <header className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-4 py-3 shadow-sm shrink-0 flex-wrap gap-2">
         <div className="flex items-center gap-3">
@@ -397,31 +407,129 @@ export function Sells() {
 
           <div className="bg-gray-50 p-2 lg:p-4 border-t border-gray-200 shrink-0">
             <div className="flex justify-between items-center mb-2 lg:mb-4">
-                <span className="text-xs lg:text-sm text-gray-500 font-bold">Total:</span>
+                <span className="text-xs lg:text-sm text-gray-500 font-bold uppercase tracking-widest">Subtotal:</span>
                 <span className="text-xl lg:text-3xl font-extrabold text-gray-900 truncate">${(cartTotal || 0).toFixed(2)}</span>
             </div>
 
-            <div className="flex gap-1 lg:gap-2 mb-2 lg:mb-4">
-                <label className={`flex-1 flex flex-col lg:flex-row items-center justify-center gap-1 lg:gap-2 p-2 lg:p-3 rounded-xl border-2 cursor-pointer transition-colors ${isCash ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 text-gray-500 hover:bg-gray-100'}`}>
-                    <input type="radio" checked={isCash} onChange={() => setIsCash(true)} className="hidden" />
-                    <span className="text-sm lg:text-xl leading-none">💵</span> <span className="font-bold text-[10px] lg:text-sm">Efectivo</span>
-                </label>
-                <label className={`flex-1 flex flex-col lg:flex-row items-center justify-center gap-1 lg:gap-2 p-2 lg:p-3 rounded-xl border-2 cursor-pointer transition-colors ${!isCash ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 text-gray-500 hover:bg-gray-100'}`}>
-                    <input type="radio" checked={!isCash} onChange={() => setIsCash(false)} className="hidden" />
-                    <span className="text-sm lg:text-xl leading-none">💳</span> <span className="font-bold text-[10px] lg:text-sm">Tarjeta</span>
-                </label>
-            </div>
-
-            <button disabled={cart.length === 0} onClick={handleCheckout} className="w-full rounded-xl bg-primary px-3 py-3 lg:px-4 lg:py-4 text-[10px] sm:text-xs lg:text-sm font-bold text-white hover:brightness-90 transition-all shadow-lg shadow-primary/30 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer uppercase tracking-wider lg:tracking-widest">
-              Cobrar
+            <button disabled={cart.length === 0} onClick={() => setIsCheckoutModalOpen(true)} className="w-full rounded-xl bg-primary px-3 py-3 lg:px-4 lg:py-4 text-[10px] sm:text-xs lg:text-sm font-bold text-white hover:brightness-90 transition-all shadow-lg shadow-primary/30 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer uppercase tracking-wider lg:tracking-widest">
+              Pagar
             </button>
           </div>
         </div>
       </div>
 
+      {/* MODAL DE CONFIRMACIÓN DE PAGO (CHECKOUT) */}
+      <AnimatePresence>
+        {isCheckoutModalOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            {/* Animación "layout" permite que el modal se adapte a su contenido suavemente */}
+            <motion.div layout initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-white rounded-3xl shadow-2xl border border-gray-200 p-6 sm:p-8 w-full max-w-sm flex flex-col overflow-hidden">
+              
+              <motion.div layout className="text-center mb-6">
+                <h3 className="text-2xl font-extrabold text-gray-900">Confirmar Pago</h3>
+                <p className="text-xs font-bold text-gray-500 mt-1 uppercase tracking-widest">Selecciona el método</p>
+              </motion.div>
+
+              <motion.div layout className="relative flex w-full bg-gray-100 rounded-2xl p-1.5 mb-6 shadow-inner border border-gray-200">
+                 <motion.div 
+                    className="absolute top-1.5 bottom-1.5 w-[calc(50%-6px)] rounded-xl shadow-md"
+                    animate={{ 
+                        x: isCash ? 0 : "100%", 
+                        backgroundColor: isCash ? "#22c55e" : "#3b82f6" 
+                    }}
+                    transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                 />
+                 <button onClick={() => { setIsCash(true); setAmountReceived(""); }} className={`flex-1 relative z-10 py-3 text-sm font-extrabold transition-colors flex items-center justify-center gap-2 cursor-pointer ${isCash ? 'text-white' : 'text-gray-500 hover:text-gray-700'}`}>
+                    💵 Efectivo
+                 </button>
+                 <button onClick={() => setIsCash(false)} className={`flex-1 relative z-10 py-3 text-sm font-extrabold transition-colors flex items-center justify-center gap-2 cursor-pointer ${!isCash ? 'text-white' : 'text-gray-500 hover:text-gray-700'}`}>
+                    💳 Tarjeta
+                 </button>
+              </motion.div>
+
+              <motion.div layout className="bg-gray-50 rounded-2xl p-4 border border-gray-200 mb-6 text-center">
+                  <span className="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-1">Total a Cobrar</span>
+                  <span className={`text-4xl font-extrabold transition-colors ${isCash ? 'text-green-600' : 'text-blue-600'}`}>
+                      ${(isCash ? cartTotal : cartTotal * 1.04).toFixed(2)}
+                  </span>
+                  {!isCash && (
+                      <p className="text-[10px] font-bold text-blue-500 mt-2 bg-blue-50 py-1 rounded-md border border-blue-100">Incluye comisión bancaria del 4%</p>
+                  )}
+              </motion.div>
+
+              <AnimatePresence mode="popLayout">
+                  {isCash && (
+                      <motion.div 
+                          key="cash-input"
+                          layout
+                          initial={{ opacity: 0 }} 
+                          animate={{ opacity: 1 }} 
+                          exit={{ opacity: 0 }} 
+                          transition={{ duration: 0.2 }}
+                          className="w-full mb-6 space-y-4"
+                      >
+                          <div>
+                              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block mb-2 text-center">Efectivo Recibido</label>
+                              <input 
+                                  type="text" 
+                                  inputMode="decimal"
+                                  autoFocus
+                                  value={amountReceived} 
+                                  onChange={e => {
+                                      let val = e.target.value.replace(/[^0-9.]/g, '');
+                                      const parts = val.split('.');
+                                      if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+                                      setAmountReceived(val);
+                                  }} 
+                                  placeholder="0.00"
+                                  className="w-full text-center text-3xl font-extrabold text-gray-900 border-b-2 border-gray-300 outline-none focus:border-green-500 bg-transparent py-2 transition-colors placeholder:text-gray-300" 
+                              />
+                          </div>
+                          
+                          <AnimatePresence mode="popLayout">
+                              {Number(amountReceived) > 0 && (
+                                  <motion.div 
+                                      key="cash-change"
+                                      layout
+                                      initial={{ opacity: 0 }} 
+                                      animate={{ opacity: 1 }} 
+                                      exit={{ opacity: 0 }}
+                                      transition={{ duration: 0.2 }}
+                                      className="w-full"
+                                  >
+                                      <div className="flex justify-between items-center bg-gray-900 text-white p-3 rounded-xl shadow-inner">
+                                          <span className="text-xs font-bold uppercase tracking-widest">Cambio:</span>
+                                          <span className={`text-xl font-extrabold transition-colors ${Number(amountReceived) >= cartTotal ? 'text-green-400' : 'text-red-400'}`}>
+                                              ${(Number(amountReceived) - cartTotal).toFixed(2)}
+                                          </span>
+                                      </div>
+                                  </motion.div>
+                              )}
+                          </AnimatePresence>
+                      </motion.div>
+                  )}
+              </AnimatePresence>
+
+              <motion.div layout className="flex gap-3 mt-auto pt-2">
+                  <button onClick={() => setIsCheckoutModalOpen(false)} className="flex-1 py-3.5 bg-gray-100 text-gray-600 rounded-xl text-xs font-extrabold uppercase tracking-widest hover:bg-gray-200 transition-colors shadow-sm cursor-pointer">
+                      Volver
+                  </button>
+                  <button 
+                      onClick={handleCheckout} 
+                      disabled={isCash && (Number(amountReceived) || 0) < cartTotal}
+                      className={`flex-1 py-3.5 text-white rounded-xl text-xs font-extrabold uppercase tracking-widest transition-all shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${isCash ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                  >
+                      Confirmar
+                  </button>
+              </motion.div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {toast && (
-          <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[90]">
             <div className={`px-6 py-3 rounded-full shadow-xl font-bold text-sm flex items-center gap-2 ${toast.type === 'success' ? 'bg-green-500 text-white' : toast.type === 'info' ? 'bg-blue-500 text-white' : 'bg-red-500 text-white'}`}>
               {toast.msg}
             </div>
@@ -431,7 +539,7 @@ export function Sells() {
 
       <AnimatePresence>
         {errorModal.isOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg flex flex-col gap-4 border border-gray-100">
               <div className="flex items-center gap-3 text-red-500 border-b border-gray-100 pb-3">
                 <span className="text-3xl">⚠️</span>
