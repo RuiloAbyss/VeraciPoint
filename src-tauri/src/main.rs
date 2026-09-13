@@ -73,11 +73,14 @@ fn main() {
 
     tauri::Builder::default()
         .setup(|app| {
-            let host = env::var("DB_HOST").expect("Falta DB_HOST");
-            let port: u16 = env::var("DB_PORT").unwrap_or_else(|_| "1433".to_string()).parse().expect("DB_PORT numérico");
-            let user = env::var("DB_USER").expect("Falta DB_USER");
-            let pass = env::var("DB_PASS").expect("Falta DB_PASS");
-            let db_name = env::var("DB_NAME").expect("Falta DB_NAME");
+            let host = env::var("DB_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+            let port: u16 = env::var("DB_PORT")
+                .unwrap_or_else(|_| "1433".to_string())
+                .parse()
+                .unwrap_or(1433);
+            let user = env::var("DB_USER").unwrap_or_else(|_| "VeraciPointApp".to_string());
+            let pass = env::var("DB_PASS").unwrap_or_else(|_| "@Verac1Pointo1499!".to_string());
+            let db_name = env::var("DB_NAME").unwrap_or_else(|_| "AbarrotesJanny".to_string());
 
             let mut config = Config::new();
             config.host(host);
@@ -87,9 +90,8 @@ fn main() {
             config.trust_cert();
 
             let manager = ConnectionManager::build(config).expect("Configuración inválida");
-
             let pool = tauri::async_runtime::block_on(async {
-                Pool::builder().max_size(5).build(manager).await.expect("Error al conectar")
+                Pool::builder().max_size(5).build(manager).await.expect("Error al conectar a la base de datos")
             });
 
             app.manage(DbState { pool });
@@ -146,7 +148,6 @@ fn main() {
             commands::banner_commands::create_banner,
             commands::banner_commands::delete_banner,
             commands::banner_commands::update_banner,
-
         ])
         .run(tauri::generate_context!())
         .expect("error running tauri");
