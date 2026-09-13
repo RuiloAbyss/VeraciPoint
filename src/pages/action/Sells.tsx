@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ProductCard } from "../../components/ProductCard";
 import { BulkProductCard } from "../../components/BulkProductCard";
-import { fetchProducts, type Product } from "../../services/productService";
+import { fetchProducts, createProduct, type Product } from "../../services/productService";
 import { registerSale, type SaleDetailInput } from "../../services/sellsService";
 import { useLoading } from "../../components/LoadingContext"; 
 
@@ -31,6 +31,8 @@ export function Sells() {
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [quickProduct, setQuickProduct] = useState({ name: '', sellformat: 'Pieza', barcode: '', price: '' });
 
   // Estados del Modal de Checkout
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
@@ -97,7 +99,8 @@ export function Sells() {
   }, [uniqueCategories, categorySearch]);
 
   const filteredProducts = useMemo(() => {
-    let result = safeProducts.filter(p => p.status !== 0 && (Number(p.stock) || 0) > 0);
+    // CORRECCIÓN: Se eliminó `&& (Number(p.stock) || 0) > 0` para mostrar productos sin importar su stock
+    let result = safeProducts.filter(p => p.status !== 0);
     
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
@@ -122,6 +125,33 @@ export function Sells() {
 
   const cartTotal = cart.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.finalPrice) || 0)), 0);
 
+  const exactTotalWithFee = isCash ? cartTotal : cartTotal * 1.04;
+  const decimalPart = exactTotalWithFee - Math.floor(exactTotalWithFee);
+  const finalRoundedTotal = Number(decimalPart.toFixed(4)) >= 0.60 
+      ? Math.ceil(exactTotalWithFee) 
+      : Math.floor(exactTotalWithFee);
+  const isRounded = Math.abs(exactTotalWithFee - finalRoundedTotal) > 0.001;
+
+  const handleQuickAdd = () => {
+    if (!quickProduct.name || !quickProduct.price) {
+      showToast("Nombre y precio son obligatorios", "error");
+      return;
+    }
+    const tempProduct: Product = {
+      id: Date.now(),
+      name: quickProduct.name,
+      sellformat: quickProduct.sellformat,
+      barcode: quickProduct.barcode || null,
+      price: Number(quickProduct.price),
+      stock: 0, 
+      category: "Registro Rápido",
+      status: 1
+    };
+    addToCart(tempProduct);
+    setQuickProduct({ name: '', sellformat: 'Pieza', barcode: '', price: '' });
+    setIsQuickAddOpen(false);
+  };
+
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
         e.preventDefault();
@@ -138,10 +168,6 @@ export function Sells() {
     setCart(prev => {
       const existing = prev.find(item => item.product.id === product.id);
       if (existing) {
-        if (Number(existing.quantity) >= (Number(product.stock) || 0)) {
-            showToast("Stock máximo alcanzado", "info");
-            return prev;
-        }
         return prev.map(item => item.product.id === product.id ? { ...item, quantity: Number(item.quantity) + 1 } : item);
       }
       return [...prev, { product, quantity: 1, finalPrice: Number(product.price) || 0 }];
@@ -164,10 +190,6 @@ export function Sells() {
 
     setCart(prev => prev.map(item => {
       if (item.product.id === productId) {
-        if (field === 'quantity' && typeof num === 'number' && num > (Number(item.product.stock) || 0)) {
-            showToast(`Solo hay ${item.product.stock} disponibles`, "info");
-            return { ...item, quantity: Number(item.product.stock) || 0 };
-        }
         return { ...item, [field]: num };
       }
       return item;
@@ -183,7 +205,6 @@ export function Sells() {
     setLoading(true); 
     try {
       const multiplier = isCash ? 1 : 1.04;
-      const finalTotal = cartTotal * multiplier;
 
       const details: SaleDetailInput[] = cart.map(item => ({
         productName: item.product.name,
@@ -191,13 +212,32 @@ export function Sells() {
         subtotal: ((Number(item.quantity) || 0) * (Number(item.finalPrice) || 0)) * multiplier
       }));
 
-      await registerSale(employeeId, isCash, finalTotal, details);
+      await registerSale(employeeId, isCash, finalRoundedTotal, details);
+
+      const tempItems = cart.filter(item => item.product.category === "Registro Rápido");
+      for (const item of tempItems) {
+          try {
+              await createProduct(
+                  item.product.name,
+                  Number(item.product.price),
+                  "Sin Registro", 
+                  item.product.barcode || null,
+                  item.product.sellformat,
+                  -Number(item.quantity), 
+                  null,
+                  null
+              );
+          } catch (e) {
+              console.warn("No se pudo insertar el producto temporal en BD", e);
+          }
+      }
+
       showToast("Venta registrada exitosamente", "success");
       setCart([]);
       setIsCheckoutModalOpen(false);
       setAmountReceived("");
       setIsCash(true);
-      await loadData(); 
+      await loadData();
     } catch (error: any) {
       const errorMessage = error?.response?.data?.message || error?.message || "Error desconocido";
       const errorDetails = error?.response?.data?.details || error?.response?.data || JSON.stringify(error, null, 2);
@@ -382,9 +422,11 @@ export function Sells() {
             ) : (
                 cart.map(item => {
                     const isPieza = item.product.sellformat?.toLowerCase() === 'pieza';
+                    const isExceeded = (Number(item.quantity) || 0) > (Number(item.product.stock) || 0);
+
                     return (
-                    <div key={item.product.id} className="flex flex-col gap-1 lg:gap-2 p-2 lg:p-3 rounded-xl border border-gray-200 bg-gray-50/50 relative group">
-                        <div className="flex justify-between items-start">
+                    <div key={item.product.id} className={`flex flex-col gap-1 lg:gap-2 p-2 lg:p-3 rounded-xl border bg-gray-50/50 relative group transition-colors ${isExceeded ? 'border-orange-500 ring-1 ring-orange-500/50 shadow-sm' : 'border-gray-200'}`}>
+                        <div className="flex justify-between items-start mt-1">
                             <div className="flex-1 pr-5">
                                 <div className="flex flex-wrap items-center gap-1 mb-0.5">
                                     <p className="font-bold text-xs lg:text-sm text-gray-900 leading-tight truncate">{item.product.name}</p>
@@ -402,7 +444,7 @@ export function Sells() {
                             </div>
                             <span className="text-gray-300 font-bold mt-3 lg:mt-4 text-xs">x</span>
                             <div className="flex-[0.8] flex flex-col min-w-0">
-                                <label className="text-[8px] lg:text-[9px] font-bold text-gray-400 uppercase truncate">Precio Final $</label>
+                                <label className="text-[8px] lg:text-[9px] font-bold text-gray-400 uppercase truncate">Precio (Kg/Pz) $</label>
                                 <input type="number" min="0" step="0.01" value={item.finalPrice ?? ""} onChange={e => updateCartItem(item.product.id, 'finalPrice', e.target.value)} disabled={!isAdmin} className="w-full rounded-md border border-gray-300 px-1 py-1 text-xs font-bold text-center outline-none focus:border-primary disabled:bg-gray-100 disabled:text-gray-500 disabled:border-transparent min-w-0" />
                             </div>
                             <span className="text-gray-300 font-bold mt-3 lg:mt-4 text-xs">=</span>
@@ -413,6 +455,53 @@ export function Sells() {
                     </div>
                 )
                 })
+            )}
+          </div>
+
+          {/* SECCIÓN DE REGISTRO RÁPIDO */}
+          <div className="px-2 lg:px-4 py-2 shrink-0">
+            {!isQuickAddOpen ? (
+                <button 
+                    onClick={() => setIsQuickAddOpen(true)} 
+                    className="w-full py-2 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 text-xs font-bold hover:border-primary hover:text-primary hover:bg-primary/5 transition-all cursor-pointer"
+                >
+                    + Agregar Producto Rápido
+                </button>
+            ) : (
+                <div className="bg-gray-100/80 p-2 rounded-xl border border-gray-200 flex flex-col gap-2 shadow-inner">
+                    <input 
+                        type="text" autoFocus placeholder="Nombre del producto *" 
+                        value={quickProduct.name} onChange={e => setQuickProduct({...quickProduct, name: e.target.value})} 
+                        className="w-full text-xs font-bold p-2 rounded-lg border border-gray-300 outline-none focus:border-primary bg-white" 
+                    />
+                    <div className="flex gap-2">
+                        <select 
+                            value={quickProduct.sellformat} onChange={e => setQuickProduct({...quickProduct, sellformat: e.target.value})} 
+                            className="flex-1 text-xs font-bold p-2 rounded-lg border border-gray-300 outline-none bg-white"
+                        >
+                            <option value="Pieza">Pieza</option>
+                            <option value="Peso">Peso (KG)</option>
+                        </select>
+                        <input 
+                            type="text" placeholder="Cód. Barras (Opcional)" 
+                            value={quickProduct.barcode} onChange={e => setQuickProduct({...quickProduct, barcode: e.target.value})} 
+                            className="flex-[1.5] text-xs font-bold p-2 rounded-lg border border-gray-300 outline-none focus:border-primary bg-white" 
+                        />
+                    </div>
+                    <div className="flex gap-2 items-center">
+                        <input 
+                            type="number" min="0" step="0.01" placeholder="Precio Final (Kg/Pz) $*" 
+                            value={quickProduct.price} onChange={e => setQuickProduct({...quickProduct, price: e.target.value})} 
+                            className="flex-1 text-xs font-extrabold p-2 rounded-lg border border-gray-300 outline-none focus:border-primary bg-white" 
+                        />
+                        <button onClick={handleQuickAdd} className="bg-primary text-white px-4 py-2 rounded-lg text-xs font-bold hover:brightness-90 transition-all cursor-pointer shadow-sm">
+                            Añadir
+                        </button>
+                        <button onClick={() => setIsQuickAddOpen(false)} className="bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-xs font-bold hover:bg-gray-50 transition-all cursor-pointer shadow-sm">
+                            ✕
+                        </button>
+                    </div>
+                </div>
             )}
           </div>
 
@@ -433,7 +522,6 @@ export function Sells() {
       <AnimatePresence>
         {isCheckoutModalOpen && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            {/* Animación "layout" permite que el modal se adapte a su contenido suavemente */}
             <motion.div layout initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-white rounded-3xl shadow-2xl border border-gray-200 p-6 sm:p-8 w-full max-w-sm flex flex-col overflow-hidden">
               
               <motion.div layout className="text-center mb-6">
@@ -460,11 +548,18 @@ export function Sells() {
 
               <motion.div layout className="bg-gray-50 rounded-2xl p-4 border border-gray-200 mb-6 text-center">
                   <span className="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-1">Total a Cobrar</span>
-                  <span className={`text-4xl font-extrabold transition-colors ${isCash ? 'text-green-600' : 'text-blue-600'}`}>
-                      ${(isCash ? cartTotal : cartTotal * 1.04).toFixed(2)}
+                  <span className={`text-4xl font-extrabold transition-colors block ${isCash ? 'text-green-600' : 'text-blue-600'}`}>
+                      ${finalRoundedTotal.toFixed(2)}
                   </span>
+                  
+                  {isRounded && (
+                      <p className="text-[10px] font-bold text-orange-500 mt-1.5 bg-orange-50 border border-orange-200 py-1 rounded-md">
+                          Redondeo aplicado (Monto base: ${exactTotalWithFee.toFixed(2)})
+                      </p>
+                  )}
+
                   {!isCash && (
-                      <p className="text-[10px] font-bold text-blue-500 mt-2 bg-blue-50 py-1 rounded-md border border-blue-100">Incluye comisión bancaria del 4%</p>
+                      <p className="text-[10px] font-bold text-blue-500 mt-1.5 bg-blue-50 py-1 rounded-md border border-blue-100">Incluye comisión bancaria del 4%</p>
                   )}
               </motion.div>
 
@@ -510,8 +605,8 @@ export function Sells() {
                                   >
                                       <div className="flex justify-between items-center bg-gray-900 text-white p-3 rounded-xl shadow-inner">
                                           <span className="text-xs font-bold uppercase tracking-widest">Cambio:</span>
-                                          <span className={`text-xl font-extrabold transition-colors ${Number(amountReceived) >= cartTotal ? 'text-green-400' : 'text-red-400'}`}>
-                                              ${(Number(amountReceived) - cartTotal).toFixed(2)}
+                                          <span className={`text-xl font-extrabold transition-colors ${Number(amountReceived) >= finalRoundedTotal ? 'text-green-400' : 'text-red-400'}`}>
+                                              ${(Number(amountReceived) - finalRoundedTotal).toFixed(2)}
                                           </span>
                                       </div>
                                   </motion.div>
@@ -527,7 +622,7 @@ export function Sells() {
                   </button>
                   <button 
                       onClick={handleCheckout} 
-                      disabled={isCash && (Number(amountReceived) || 0) < cartTotal}
+                      disabled={isCash && (Number(amountReceived) || 0) < finalRoundedTotal}
                       className={`flex-1 py-3.5 text-white rounded-xl text-xs font-extrabold uppercase tracking-widest transition-all shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${isCash ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}
                   >
                       Confirmar
