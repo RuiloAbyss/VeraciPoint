@@ -7,7 +7,7 @@ pub struct Product {
     pub name: String,
     pub price: f64,
     pub category: String,
-    pub barcode: Option<i64>,
+    pub barcode: Option<String>,
     pub sellformat: Option<String>,
     pub stock: f64,
     pub min_stock: Option<f64>,

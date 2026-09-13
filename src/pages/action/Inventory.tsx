@@ -33,7 +33,7 @@ export function Inventory() {
 
   const [currentRegularPage, setCurrentRegularPage] = useState(1);
   const [currentBulkPage, setCurrentBulkPage] = useState(1);
-  const itemsPerPage = 30; // Ajustado a 30 elementos por página
+  const itemsPerPage = 30;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -98,7 +98,7 @@ export function Inventory() {
       const lower = searchTerm.toLowerCase();
       result = result.filter(p => 
         (p.name && p.name.toLowerCase().includes(lower)) || 
-        (p.barcode && p.barcode.toString().includes(lower)) || 
+        (p.barcode && p.barcode.toLowerCase().includes(lower)) ||
         (p.category && p.category.toLowerCase().includes(lower))
       );
     }
@@ -120,7 +120,7 @@ export function Inventory() {
     else if (sortOrder === "Ordenar: Z-A") result.sort((a, b) => (b.name || "").localeCompare(a.name || ""));
     else if (sortOrder === "Menor Precio") result.sort((a, b) => Number(a.price) - Number(b.price));
     else if (sortOrder === "Código de Barras") {
-      result.sort((a, b) => Number(a.barcode || 0) - Number(b.barcode || 0));
+      result.sort((a, b) => (a.barcode || "").localeCompare(b.barcode || ""));
     }
     
     return result;
@@ -219,14 +219,14 @@ export function Inventory() {
   const executeFormSave = async (data: any) => {
     setLoading(true);
     try {
-      const code = data.barcode ? parseInt(data.barcode) : null;
+      const code = data.barcode ? data.barcode.trim() : null;
       if (modalState === 'create') {
         const newId = await createProduct(data.name, data.price, data.category, code, data.sellformat, data.quantity, data.minStock, data.maxStock);
         if (data.newPhotoBase64) await uploadPhoto(newId, data.newPhotoBase64);
         showToast("Producto registrado exitosamente", "success");
       } else {
         if (!selectedId || !selectedProduct) return;
-        const currentCode = selectedProduct.barcode ? selectedProduct.barcode.toString() : null;
+        const currentCode = selectedProduct.barcode || null;
         
         const prevMin = selectedProduct.minStock ?? null;
         const prevMax = selectedProduct.maxStock ?? null;
@@ -433,7 +433,7 @@ export function Inventory() {
                     {...prod} 
                     price={Number(prod.price) || 0}
                     stock={Number(prod.stock) || 0}
-                    code={prod.barcode?.toString() || "S/N"} 
+                    code={prod.barcode || "S/N"} 
                     isSelected={selectedId === prod.id} 
                     originalPrice={originalPrice ? Number(originalPrice) : undefined} 
                     onClick={() => setSelectedId(selectedId === prod.id ? null : prod.id)} 

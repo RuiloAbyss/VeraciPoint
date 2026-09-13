@@ -28,7 +28,7 @@ pub async fn fetch_all_products(pool: &Pool<ConnectionManager>) -> Result<Vec<Pr
             name: row.get::<&str, _>("name").unwrap_or("").to_string(),
             price: row.get::<f64, _>("price").unwrap_or(0.0),
             category: row.get::<&str, _>("categoryName").unwrap_or("").to_string(),
-            barcode: row.get::<i64, _>("barcode"),
+            barcode: row.get::<&str, _>("barcode").map(|s| s.to_string()),
             sellformat: row.get::<&str, _>("sellformat").map(|s| s.to_string()),
             stock: row.get::<f64, _>("quantity").unwrap_or(0.0),
             min_stock: row.get::<f64, _>("minStock"),
@@ -40,7 +40,7 @@ pub async fn fetch_all_products(pool: &Pool<ConnectionManager>) -> Result<Vec<Pr
     Ok(products)
 }
 
-pub async fn edit_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, id: i32, name: String, price: f64, barcode: Option<i64>, category: String, sellformat: String, min_stock: Option<f64>, max_stock: Option<f64>) -> Result<(), String> {
+pub async fn edit_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, id: i32, name: String, price: f64, barcode: Option<String>, category: String, sellformat: String, min_stock: Option<f64>, max_stock: Option<f64>) -> Result<(), String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
     let query = "
         DECLARE @catId VARCHAR(36) = (SELECT TOP 1 categoryId FROM category WHERE name = @P5);
@@ -51,7 +51,7 @@ pub async fn edit_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, id:
     Ok(())
 }
 
-pub async fn create_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, name: String, price: f64, category: String, barcode: Option<i64>, sellformat: String, quantity: f64, min_stock: Option<f64>, max_stock: Option<f64>) -> Result<i32, String> {
+pub async fn create_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, name: String, price: f64, category: String, barcode: Option<String>, sellformat: String, quantity: f64, min_stock: Option<f64>, max_stock: Option<f64>) -> Result<i32, String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
     let query = "
         DECLARE @catId VARCHAR(36) = (SELECT TOP 1 categoryId FROM category WHERE name = @P1);
