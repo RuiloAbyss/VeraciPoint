@@ -38,11 +38,13 @@ export function Orders() {
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   
-  // Objeto completo para manejar el formulario del proveedor
   const [providerModal, setProviderModal] = useState({ isOpen: false, id: null as string | null, name: "", originalName: "", description: "", cellphone: "" });
   
   const [isExtraPanelOpen, setIsExtraPanelOpen] = useState(false);
   const [extraSearch, setExtraSearch] = useState("");
+
+  // Nuevo estado para el filtro de fecha
+  const [dateFilter, setDateFilter] = useState("");
 
   const showToastMsg = (msg: string, type: 'success' | 'error') => {
     setToast({ msg, type });
@@ -92,7 +94,13 @@ export function Orders() {
     if (raw) {
         const parsed = JSON.parse(raw);
         setSessionEmpId(parsed.employeeId || 0);
-        setIsAdmin(Boolean(parsed.isAdmin ?? parsed.is_admin));
+        const userIsAdmin = Boolean(parsed.isAdmin ?? parsed.is_admin);
+        setIsAdmin(userIsAdmin);
+        
+        // Si no es admin, forzar la vista de historial de pedidos
+        if (!userIsAdmin) {
+            setActiveTab('history');
+        }
     }
     loadData();
   }, []);
@@ -125,6 +133,12 @@ export function Orders() {
     if (!extraSearch) return availableProductsForActiveOrder;
     return availableProductsForActiveOrder.filter(p => p.name.toLowerCase().includes(extraSearch.toLowerCase()));
   }, [availableProductsForActiveOrder, extraSearch]);
+
+  // Filtro de fecha para los pedidos
+  const filteredOrders = useMemo(() => {
+    if (!dateFilter) return orders;
+    return orders.filter(o => o.createdAt && o.createdAt.startsWith(dateFilter));
+  }, [orders, dateFilter]);
 
   const handleAddToCart = (p: Product) => {
     setCart(prev => {
@@ -305,14 +319,16 @@ export function Orders() {
             <h1 className="text-lg sm:text-xl font-extrabold text-gray-900 leading-none">Reabastecimiento</h1>
           </div>
         </div>
-        <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
-          <button onClick={() => setActiveTab('providers')} className={`px-4 py-2 text-xs font-bold rounded-md transition-colors cursor-pointer ${activeTab === 'providers' ? 'bg-white shadow-sm text-primary' : 'text-gray-500 hover:text-gray-800'}`}>Catálogo de Proveedores</button>
-          <button onClick={() => setActiveTab('history')} className={`px-4 py-2 text-xs font-bold rounded-md transition-colors cursor-pointer ${activeTab === 'history' ? 'bg-white shadow-sm text-primary' : 'text-gray-500 hover:text-gray-800'}`}>Control de Pedidos</button>
-        </div>
+        {isAdmin && (
+            <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+            <button onClick={() => setActiveTab('providers')} className={`px-4 py-2 text-xs font-bold rounded-md transition-colors cursor-pointer ${activeTab === 'providers' ? 'bg-white shadow-sm text-primary' : 'text-gray-500 hover:text-gray-800'}`}>Catálogo de Proveedores</button>
+            <button onClick={() => setActiveTab('history')} className={`px-4 py-2 text-xs font-bold rounded-md transition-colors cursor-pointer ${activeTab === 'history' ? 'bg-white shadow-sm text-primary' : 'text-gray-500 hover:text-gray-800'}`}>Control de Pedidos</button>
+            </div>
+        )}
       </header>
 
       <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
-        {activeTab === 'providers' ? (
+        {activeTab === 'providers' && isAdmin ? (
           <>
             <section className="flex-col w-full lg:w-1/3 rounded-2xl bg-white border border-gray-200 p-4 shadow-sm overflow-hidden flex">
               <div className="flex justify-between items-center mb-2 border-b border-gray-100 pb-2">
@@ -322,7 +338,6 @@ export function Orders() {
                   )}
               </div>
               
-              {/* BARRA DE HERRAMIENTAS HORIZONTAL LIMPIA */}
               {isAdmin && (
                   <div className="flex items-center justify-between mb-3 bg-gray-50 p-2 rounded-lg border border-gray-100">
                       <label className="flex items-center gap-2 text-[10px] font-bold text-gray-500 cursor-pointer uppercase tracking-wider ml-1">
@@ -397,32 +412,32 @@ export function Orders() {
 
                   <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 mb-4 grid grid-cols-1 md:grid-cols-2 gap-2 content-start">
                     {providerProducts.map(p => {
-  const salesInfo = sales30Days.find(s => s.name === p.name);
-  const isAdded = cart.some(c => c.productId === p.id);
-  
-  const formatStr = p.sellformat?.toLowerCase() || '';
-  const isGranel = formatStr.includes('granel') || formatStr.includes('kg') || formatStr.includes('kilo');
-  const unitLabel = isGranel ? 'kg' : 'uni';
+                      const salesInfo = sales30Days.find(s => s.name === p.name);
+                      const isAdded = cart.some(c => c.productId === p.id);
+                      
+                      const formatStr = p.sellformat?.toLowerCase() || '';
+                      const isGranel = formatStr.includes('granel') || formatStr.includes('kg') || formatStr.includes('kilo');
+                      const unitLabel = isGranel ? 'kg' : 'uni';
 
-  return (
-    <div key={p.id} className={`p-3 rounded-xl border flex flex-col justify-between gap-2 transition-colors ${isAdded ? 'border-primary bg-primary/5' : 'border-gray-200 bg-gray-50'}`}>
-      <div>
-        <div className="flex justify-between items-start">
-          <p className="font-bold text-sm text-gray-900 truncate pr-2">{p.name}</p>
-          <span className="text-[10px] font-extrabold text-gray-500 whitespace-nowrap">
-            Cantidad: {p.stock} {unitLabel}{p.maxStock ? ` / ${p.maxStock} ${unitLabel}` : ''}
-          </span>
-        </div>
-        <p className="text-[10px] text-gray-500 font-bold uppercase mt-1">
-          Ventas Mensuales: <span className={salesInfo ? 'text-green-600' : 'text-gray-400'}>{salesInfo ? salesInfo.quantity : 0} {unitLabel.toUpperCase()}</span>
-        </p>
-      </div>
-      <button disabled={isAdded} onClick={() => handleAddToCart(p)} className={`w-full py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer ${isAdded ? 'bg-primary text-white cursor-default' : 'bg-white border border-gray-300 text-gray-700 hover:border-primary hover:text-primary'}`}>
-        {isAdded ? 'En Pedido ✅' : 'Añadir a Pedido'}
-      </button>
-    </div>
-  )
-})}
+                      return (
+                        <div key={p.id} className={`p-3 rounded-xl border flex flex-col justify-between gap-2 transition-colors ${isAdded ? 'border-primary bg-primary/5' : 'border-gray-200 bg-gray-50'}`}>
+                          <div>
+                            <div className="flex justify-between items-start">
+                              <p className="font-bold text-sm text-gray-900 truncate pr-2">{p.name}</p>
+                              <span className="text-[10px] font-extrabold text-gray-500 whitespace-nowrap">
+                                Cantidad: {p.stock} {unitLabel}{p.maxStock ? ` / ${p.maxStock} ${unitLabel}` : ''}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-gray-500 font-bold uppercase mt-1">
+                              Ventas Mensuales: <span className={salesInfo ? 'text-green-600' : 'text-gray-400'}>{salesInfo ? salesInfo.quantity : 0} {unitLabel.toUpperCase()}</span>
+                            </p>
+                          </div>
+                          <button disabled={isAdded} onClick={() => handleAddToCart(p)} className={`w-full py-1.5 rounded-md text-xs font-bold transition-colors cursor-pointer ${isAdded ? 'bg-primary text-white cursor-default' : 'bg-white border border-gray-300 text-gray-700 hover:border-primary hover:text-primary'}`}>
+                            {isAdded ? 'En Pedido ✅' : 'Añadir a Pedido'}
+                          </button>
+                        </div>
+                      )
+                    })}
                   </div>
                   {cart.length > 0 && (
                     <div className="border-t border-gray-200 pt-4 shrink-0 bg-white">
@@ -453,25 +468,60 @@ export function Orders() {
           </>
         ) : (
           <section className="flex-col flex-1 rounded-2xl bg-white border border-gray-200 p-4 shadow-sm overflow-hidden flex">
-            <table className="w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-gray-100 text-gray-500 text-[10px] uppercase font-bold sticky top-0 z-10">
-                <tr><th className="p-4">Folio</th><th className="p-4">Proveedor</th><th className="p-4">Creado</th><th className="p-4">Estado</th><th className="p-4 text-right">Total</th></tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {orders.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-gray-400 font-bold">No hay pedidos registrados.</td></tr>}
-                {orders.map(o => (
-                  <tr key={o.orderId} onClick={() => openOrder(o)} className="hover:bg-gray-50 transition-colors cursor-pointer">
-                    <td className="p-4 font-extrabold text-gray-900">#{o.orderId}</td>
-                    <td className="p-4 font-bold text-gray-700">{o.provider}</td>
-                    <td className="p-4 text-gray-500">{o.createdAt.split(' ')[0]}</td>
-                    <td className="p-4">
-                      <span className={`px-2.5 py-1 rounded-md text-[10px] font-extrabold uppercase tracking-wider border ${o.status==='Generada'?'bg-blue-50 text-blue-600 border-blue-200':o.status==='Cancelada'?'bg-red-50 text-red-600 border-red-200':'bg-green-50 text-green-600 border-green-200'}`}>{o.status}</span>
-                    </td>
-                    <td className="p-4 text-right font-extrabold text-gray-900">${o.total.toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-extrabold text-gray-900 shrink-0">Historial de Pedidos</h2>
+                <div className="flex items-center gap-2">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase">Filtro por Fecha:</label>
+                    <input 
+                        type="date" 
+                        value={dateFilter} 
+                        onChange={(e) => setDateFilter(e.target.value)} 
+                        className="rounded-lg bg-gray-50 px-3 py-2 text-sm outline-none border border-gray-200 focus:border-primary transition-colors cursor-pointer" 
+                    />
+                    {dateFilter && (
+                        <button 
+                            onClick={() => setDateFilter("")} 
+                            className="bg-red-50 text-red-500 px-3 py-2 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors cursor-pointer"
+                        >
+                            ✕
+                        </button>
+                    )}
+                </div>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto custom-scrollbar border border-gray-200 rounded-xl">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                <thead className="bg-gray-100 text-gray-500 text-[10px] uppercase font-bold sticky top-0 z-10 shadow-sm">
+                    <tr>
+                        <th className="p-4">Folio</th>
+                        <th className="p-4">Proveedor</th>
+                        <th className="p-4">Creado</th>
+                        <th className="p-4">Estado</th>
+                        <th className="p-4 text-right">Total</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                    {filteredOrders.length === 0 && (
+                        <tr>
+                            <td colSpan={5} className="p-8 text-center text-gray-400 font-bold">
+                                {dateFilter ? 'No hay pedidos registrados en esta fecha.' : 'No hay pedidos registrados.'}
+                            </td>
+                        </tr>
+                    )}
+                    {filteredOrders.map(o => (
+                    <tr key={o.orderId} onClick={() => openOrder(o)} className="hover:bg-gray-50 transition-colors cursor-pointer">
+                        <td className="p-4 font-extrabold text-gray-900">#{o.orderId}</td>
+                        <td className="p-4 font-bold text-gray-700">{o.provider}</td>
+                        <td className="p-4 text-gray-500">{o.createdAt.split(' ')[0]}</td>
+                        <td className="p-4">
+                        <span className={`px-2.5 py-1 rounded-md text-[10px] font-extrabold uppercase tracking-wider border ${o.status==='Generada'?'bg-blue-50 text-blue-600 border-blue-200':o.status==='Cancelada'?'bg-red-50 text-red-600 border-red-200':'bg-green-50 text-green-600 border-green-200'}`}>{o.status}</span>
+                        </td>
+                        <td className="p-4 text-right font-extrabold text-gray-900">${o.total.toFixed(2)}</td>
+                    </tr>
+                    ))}
+                </tbody>
+                </table>
+            </div>
           </section>
         )}
       </div>
