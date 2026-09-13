@@ -27,7 +27,7 @@ export function Sells() {
   const [categoryFilter, setCategoryFilter] = useState("Categoría");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [toast, setToast] = useState<{ msg: string, type: 'success' | 'error' | 'info' } | null>(null);
-
+  const [isClearCartModalOpen, setIsClearCartModalOpen] = useState(false);
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
@@ -358,8 +358,19 @@ export function Sells() {
 
         <div className="flex flex-col w-[200px] sm:w-[280px] lg:w-[400px] shrink-0 rounded-2xl bg-white border border-gray-200 shadow-sm min-h-0 overflow-hidden">
           <div className="bg-gray-50 p-2 lg:p-4 border-b border-gray-200 flex justify-between items-center shrink-0">
-            <h2 className="text-sm lg:text-lg font-bold text-gray-900 truncate">Lista de Cobro</h2>
-            <span className="text-[10px] lg:text-xs font-extrabold text-primary bg-primary/10 px-2 py-1 rounded-full shrink-0">{cart.length} items</span>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm lg:text-lg font-bold text-gray-900 truncate">Lista de Cobro</h2>
+              <span className="text-[10px] lg:text-xs font-extrabold text-primary bg-primary/10 px-2 py-1 rounded-full shrink-0">{cart.length} items</span>
+            </div>
+            
+            {cart.length > 0 && (
+              <button 
+                onClick={() => setIsClearCartModalOpen(true)}
+                className="text-xs font-bold text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+              >
+                Vaciar
+              </button>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto p-2 lg:p-3 space-y-2 custom-scrollbar">
@@ -522,6 +533,50 @@ export function Sells() {
                       Confirmar
                   </button>
               </motion.div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL DE CONFIRMACIÓN PARA VACIAR CARRITO */}
+      <AnimatePresence>
+        {isClearCartModalOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }} 
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 20 }} 
+              animate={{ scale: 1, y: 0 }} 
+              exit={{ scale: 0.95, y: 20 }} 
+              className="bg-white rounded-3xl shadow-2xl border border-gray-200 p-6 sm:p-8 w-full max-w-sm flex flex-col text-center overflow-hidden"
+            >
+              <div className="text-red-500 text-5xl mb-4">🗑️</div>
+              <h3 className="text-xl font-extrabold text-gray-900 mb-2">¿Vaciar carrito?</h3>
+              <p className="text-xs font-medium text-gray-500 mb-6">
+                Se eliminarán todos los productos de la lista actual. Esta acción no afecta el inventario.
+              </p>
+              
+              <div className="flex gap-3 mt-auto">
+                <button 
+                  onClick={() => setIsClearCartModalOpen(false)} 
+                  className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl text-xs font-extrabold uppercase tracking-widest hover:bg-gray-200 transition-colors shadow-sm cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={() => { 
+                    setCart([]); 
+                    setIsClearCartModalOpen(false); 
+                    showToast("Carrito vaciado", "info");
+                  }} 
+                  className="flex-1 py-3 text-white bg-red-500 hover:bg-red-600 rounded-xl text-xs font-extrabold uppercase tracking-widest transition-all shadow-md shadow-red-500/30 cursor-pointer"
+                >
+                  Sí, vaciar
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
