@@ -359,7 +359,7 @@ export function Sells() {
         <div className="flex flex-col w-[200px] sm:w-[280px] lg:w-[400px] shrink-0 rounded-2xl bg-white border border-gray-200 shadow-sm min-h-0 overflow-hidden">
           <div className="bg-gray-50 p-2 lg:p-4 border-b border-gray-200 flex justify-between items-center shrink-0">
             <div className="flex items-center gap-2">
-              <h2 className="text-sm lg:text-lg font-bold text-gray-900 truncate">Lista de Cobro</h2>
+              <h2 className="text-sm lg:text-lg font-bold text-gray-900 truncate">Lista de Compras</h2>
               <span className="text-[10px] lg:text-xs font-extrabold text-primary bg-primary/10 px-2 py-1 rounded-full shrink-0">{cart.length} items</span>
             </div>
             
@@ -402,7 +402,7 @@ export function Sells() {
                             </div>
                             <span className="text-gray-300 font-bold mt-3 lg:mt-4 text-xs">x</span>
                             <div className="flex-[0.8] flex flex-col min-w-0">
-                                <label className="text-[8px] lg:text-[9px] font-bold text-gray-400 uppercase truncate">P. Fin</label>
+                                <label className="text-[8px] lg:text-[9px] font-bold text-gray-400 uppercase truncate">Precio Final $</label>
                                 <input type="number" min="0" step="0.01" value={item.finalPrice ?? ""} onChange={e => updateCartItem(item.product.id, 'finalPrice', e.target.value)} disabled={!isAdmin} className="w-full rounded-md border border-gray-300 px-1 py-1 text-xs font-bold text-center outline-none focus:border-primary disabled:bg-gray-100 disabled:text-gray-500 disabled:border-transparent min-w-0" />
                             </div>
                             <span className="text-gray-300 font-bold mt-3 lg:mt-4 text-xs">=</span>
