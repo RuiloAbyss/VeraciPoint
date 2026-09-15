@@ -6,11 +6,13 @@ pub async fn fetch_all_products(pool: &Pool<ConnectionManager>) -> Result<Vec<Pr
     let mut client = pool.get().await.map_err(|e| format!("Error de pool: {}", e))?;
     
     // Obtenemos todos los productos (activos e inactivos)
+    // SOLUCIÓN AL PANIC: Hacemos un CAST de barcode a VARCHAR desde SQL para que Rust lo lea seguro como String
     let query = "
         SELECT 
             p.productId, p.name, CAST(p.price AS FLOAT) as price, 
             ISNULL(c.name, 'Sin Categoría') as categoryName, 
-            p.barcode, p.sellformat, CAST(p.quantity AS FLOAT) as quantity,
+            CAST(p.barcode AS VARCHAR(50)) as barcode, 
+            p.sellformat, CAST(p.quantity AS FLOAT) as quantity,
             CAST(p.minStock AS FLOAT) as minStock, CAST(p.maxStock AS FLOAT) as maxStock,
             p.status,
             CAST(N'' AS XML).value('xs:base64Binary(xs:hexBinary(sql:column(\"p.photo\")))', 'VARCHAR(MAX)') as photoBase64
@@ -42,20 +44,26 @@ pub async fn fetch_all_products(pool: &Pool<ConnectionManager>) -> Result<Vec<Pr
 
 pub async fn edit_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, id: i32, name: String, price: f64, barcode: Option<String>, category: String, sellformat: String, min_stock: Option<f64>, max_stock: Option<f64>) -> Result<(), String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    
+    // Parseo seguro a BIGINT (i64) para evitar fallos de tipo en SQL
+    let barcode_i64: Option<i64> = barcode.and_then(|b| b.parse().ok());
+    
+    // SOLUCIÓN FK CONFLICT: Si no existe, dejamos @catId como NULL para no violar la Foreign Key
     let query = "
         DECLARE @catId VARCHAR(36) = (SELECT TOP 1 categoryId FROM category WHERE name = @P5);
-        IF @catId IS NULL SET @catId = 'FRUTAS-VERDURAS';
         UPDATE product SET name = @P1, price = @P2, barcode = @P3, categoryId = @catId, sellformat = @P6, minStock = @P7, maxStock = @P8 WHERE productId = @P4;
     ";
-    client.execute(query, &[&name, &price, &barcode, &id, &category, &sellformat, &min_stock, &max_stock]).await.map_err(|e| e.to_string())?;
+    client.execute(query, &[&name, &price, &barcode_i64, &id, &category, &sellformat, &min_stock, &max_stock]).await.map_err(|e| e.to_string())?;
     Ok(())
 }
 
 pub async fn create_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, name: String, price: f64, category: String, barcode: Option<String>, sellformat: String, quantity: f64, min_stock: Option<f64>, max_stock: Option<f64>) -> Result<i32, String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
+    
+    let barcode_i64: Option<i64> = barcode.and_then(|b| b.parse().ok());
+
     let query = "
         DECLARE @catId VARCHAR(36) = (SELECT TOP 1 categoryId FROM category WHERE name = @P1);
-        IF @catId IS NULL SET @catId = 'ABARROTES'; 
         
         DECLARE @Out TABLE (id INT);
 
@@ -65,7 +73,7 @@ pub async fn create_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, n
 
         SELECT id FROM @Out;
     ";
-    let stream = client.query(query, &[&category, &name, &price, &barcode, &sellformat, &quantity, &min_stock, &max_stock]).await.map_err(|e| e.to_string())?;
+    let stream = client.query(query, &[&category, &name, &price, &barcode_i64, &sellformat, &quantity, &min_stock, &max_stock]).await.map_err(|e| e.to_string())?;
     let row = stream.into_row().await.map_err(|e| e.to_string())?.ok_or("Error obteniendo ID")?;
     Ok(row.get::<i32, _>(0).unwrap_or(0))
 }
@@ -78,7 +86,6 @@ pub async fn activate_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>,
 
 pub async fn restock_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, id: i32, qty: f64) -> Result<(), String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
-    // UPDATE directo con CAST para garantizar compatibilidad del flotante con el DECIMAL de SQL
     let query = "UPDATE product SET quantity = quantity + CAST(@P1 AS DECIMAL(10,3)) WHERE productId = @P2";
     client.execute(query, &[&qty, &id]).await.map_err(|e| e.to_string())?;
     Ok(())
@@ -86,7 +93,6 @@ pub async fn restock_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, 
 
 pub async fn deactivate_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, id: i32) -> Result<(), String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
-    // UPDATE directo en lugar de SP para dar de baja
     let query = "UPDATE product SET status = 0 WHERE productId = @P1";
     client.execute(query, &[&id]).await.map_err(|e| e.to_string())?;
     Ok(())
@@ -94,7 +100,6 @@ pub async fn deactivate_product(pool: &bb8::Pool<bb8_tiberius::ConnectionManager
 
 pub async fn upload_photo(pool: &Pool<ConnectionManager>, id: i32, base64: String) -> Result<(), String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
-    // Truco: Usar el parser XML de SQL Server para decodificar Base64 directo a binario
     let query = "
         DECLARE @Base64 VARCHAR(MAX) = @P1;
         DECLARE @Bin VARBINARY(MAX) = CAST(N'' AS XML).value('xs:base64Binary(sql:variable(\"@Base64\"))', 'VARBINARY(MAX)');
@@ -113,9 +118,6 @@ pub async fn discard_stock(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, id
 
 pub async fn delete_product_hard(pool: &bb8::Pool<bb8_tiberius::ConnectionManager>, id: i32) -> Result<(), String> {
     let mut client = pool.get().await.map_err(|e| e.to_string())?;
-    
-    // Al ejecutar esto, el historial de ventas mantendrá el productName gracias al nuevo Trigger, 
-    // pero el producto desaparecerá físicamente del inventario.
     client.execute("DELETE FROM product WHERE productId = @P1", &[&id]).await.map_err(|e| e.to_string())?;
     Ok(())
 }

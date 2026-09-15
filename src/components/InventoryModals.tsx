@@ -10,8 +10,24 @@ const ModalWrapper = ({ children }: { children: React.ReactNode }) => (
   </motion.div>
 );
 
-export function ProductFormModal({ isOpen, product, categories, onClose, onSave }: { isOpen: boolean, product: Product | null, categories: string[], onClose: () => void, onSave: (data: any) => void }) {
-  const isEdit = !!product;
+export function ProductFormModal({ 
+  isOpen, 
+  mode = 'create', 
+  product, 
+  categories, 
+  onClose, 
+  onSave 
+}: { 
+  isOpen: boolean, 
+  mode?: 'create' | 'edit' | 'clone', 
+  product: Product | null, 
+  categories: string[], 
+  onClose: () => void, 
+  onSave: (data: any) => void 
+}) {
+  const isEdit = mode === 'edit';
+  const isClone = mode === 'clone';
+  
   const [name, setName] = useState("");
   const [price, setPrice] = useState<string>("");
   const [category, setCategory] = useState(categories[0] || "");
@@ -31,15 +47,21 @@ export function ProductFormModal({ isOpen, product, categories, onClose, onSave 
       setPrice(product?.price?.toString() || "");
       setCategory(product?.category || categories[0] || "");
       setSellformat(product?.sellformat || "Pieza");
+      // Si estamos clonando, dejamos la cantidad vacía para que la capture como producto nuevo
       setQuantity(isEdit ? (product?.stock?.toString() || "") : "");
       setMinStock(product?.minStock !== null && product?.minStock !== undefined ? product.minStock.toString() : "");
       setMaxStock(product?.maxStock !== null && product?.maxStock !== undefined ? product.maxStock.toString() : "");
-      setHasBarcode(product ? product.barcode !== null : false);
-      setBarcode(product?.barcode ? product.barcode.toString() : "");
+      
+      // Si estamos clonando, el código de barras por defecto se quita
+      setHasBarcode(product ? (isClone ? false : product.barcode !== null) : false);
+      setBarcode(product?.barcode && !isClone ? product.barcode.toString() : "");
+      
       setPhotoPreview(product?.photo ? `data:image/jpeg;base64,${product.photo.replace(/\s+/g, '')}` : null);
-      setNewPhotoBase64(null);
+      
+      // Si clonamos un producto con foto, pasamos la foto base64 como si fuera nueva
+      setNewPhotoBase64(isClone && product?.photo ? product.photo : null);
     }
-  }, [product, isOpen, categories]);
+  }, [product, isOpen, categories, mode]);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -55,9 +77,11 @@ export function ProductFormModal({ isOpen, product, categories, onClose, onSave 
 
   if (!isOpen) return null;
 
+  const titleStr = isEdit ? "Editar Producto" : isClone ? "Clonar Producto" : "Nuevo Producto";
+
   return (
     <ModalWrapper>
-      <h3 className="text-xl font-extrabold text-gray-900 mb-4 border-b pb-2">{isEdit ? "Editar Producto" : "Nuevo Producto"}</h3>
+      <h3 className="text-xl font-extrabold text-gray-900 mb-4 border-b pb-2">{titleStr}</h3>
       <form onSubmit={(e) => { 
         e.preventDefault(); 
         onSave({ 
@@ -134,7 +158,9 @@ export function ProductFormModal({ isOpen, product, categories, onClose, onSave 
 
         <div className="flex gap-3 pt-2">
           <button type="button" onClick={onClose} className="flex-1 rounded-xl bg-gray-100 px-4 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-200 cursor-pointer transition-colors">Cancelar</button>
-          <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white hover:brightness-90 cursor-pointer transition-all">Guardar</button>
+          <button type="submit" className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white hover:brightness-90 cursor-pointer transition-all">
+            {isClone ? 'Guardar Clon' : 'Guardar'}
+          </button>
         </div>
       </form>
     </ModalWrapper>
@@ -231,7 +257,9 @@ export function OfferModal({ isOpen, product, onClose, onConfirm }: { isOpen: bo
   }, [isOpen]);
 
   if (!isOpen || !product) return null;
+  
   const isPieza = product.sellformat === "Pieza";
+  const unitLabel = isPieza ? "pzas" : "kg";
 
   const handleQty = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = isPieza ? e.target.value.replace(/[^0-9]/g, '') : e.target.value;
@@ -242,8 +270,30 @@ export function OfferModal({ isOpen, product, onClose, onConfirm }: { isOpen: bo
   return (
     <ModalWrapper>
       <div className="text-left">
-        <h3 className="text-xl font-extrabold text-orange-600 mb-2 border-b border-orange-100 pb-2">Generar Oferta / Merma</h3>
-        <p className="text-sm text-gray-600 mb-4">Transferir stock de <strong className="text-gray-900">{product.name}</strong> a la categoría de Ofertas.</p>
+        <h3 className="text-2xl font-extrabold text-orange-600 mb-2 border-b border-orange-100 pb-2 flex items-center gap-2">
+          🏷️ Generar Oferta
+        </h3>
+        <p className="text-sm text-gray-600 mb-5 leading-relaxed">
+          Estás a punto de crear una promoción para <strong className="text-gray-900 font-extrabold">{product.name}</strong>. Esto moverá una parte de tu inventario actual a la sección de ofertas.
+        </p>
+
+        {/* Cuadro Comparativo (Antes y Después) */}
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 shadow-inner flex flex-col justify-center">
+            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Stock Original</span>
+            <p className="font-extrabold text-xl text-gray-900">${product.price.toFixed(2)} <span className="text-xs text-gray-500 font-bold">/{isPieza ? 'pza' : 'kg'}</span></p>
+            <p className="text-xs font-bold text-gray-500 mt-1">Disp: {product.stock} {unitLabel}</p>
+          </div>
+          
+          <div className="bg-orange-50 p-4 rounded-2xl border border-orange-200 shadow-sm flex flex-col justify-center relative overflow-hidden">
+            <div className="absolute -right-4 -top-4 opacity-10 text-6xl">🏷️</div>
+            <span className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-1 z-10">Nueva Oferta</span>
+            <p className="font-extrabold text-xl text-orange-600 z-10">
+              {price ? `$${parseFloat(price).toFixed(2)}` : "$0.00"} <span className="text-xs text-orange-400 font-bold">/{isPieza ? 'pza' : 'kg'}</span>
+            </p>
+            <p className="text-xs font-bold text-orange-600 mt-1 z-10">A mover: {qty || 0} {unitLabel}</p>
+          </div>
+        </div>
 
         <form onSubmit={(e) => {
           e.preventDefault();
@@ -251,31 +301,29 @@ export function OfferModal({ isOpen, product, onClose, onConfirm }: { isOpen: bo
           const numPrice = parseFloat(price);
           if (numQty > 0 && numPrice >= 0) onConfirm(numQty, numPrice);
         }}>
-          <div className="space-y-4 mb-6">
+          <div className="space-y-5 mb-6">
              <div>
-                <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Cantidad a separar</label>
-                <input type="number" step={isPieza ? "1" : "0.001"} min={isPieza ? "1" : "0.001"} max={product.stock} required value={qty} onChange={handleQty} className="w-full rounded-xl border border-orange-200 bg-orange-50/30 px-4 py-3 text-sm outline-none focus:border-orange-500 focus:bg-white font-bold transition-colors" placeholder={isPieza ? "Piezas a ofertar..." : "Kg a ofertar..."} />
-                <div className="flex justify-between items-center mt-1.5">
-                    <p className="text-[10px] text-gray-500 font-bold uppercase">Stock origen: {product.stock}</p>
-                    <p className="text-[10px] text-gray-500 font-bold uppercase">Precio original: <span className="text-gray-700">${product.price.toFixed(2)}</span></p>
+                <label className="block text-xs font-extrabold text-gray-700 uppercase mb-2">1. ¿Cuánto stock pondrás en oferta?</label>
+                <div className="relative">
+                  <input type="number" step={isPieza ? "1" : "0.001"} min={isPieza ? "1" : "0.001"} max={product.stock} required value={qty} onChange={handleQty} className="w-full rounded-xl border-2 border-orange-200 bg-orange-50/30 px-4 py-3 text-lg outline-none focus:border-orange-500 focus:bg-white font-bold transition-colors" placeholder={isPieza ? "Ej. 5 piezas..." : "Ej. 2.5 kg..."} />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-orange-400 font-bold uppercase text-sm">{unitLabel}</span>
                 </div>
              </div>
              <div>
-                <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Precio Especial de Oferta ($)</label>
-                <input type="number" step="0.01" min="0" required value={price} onChange={e => setPrice(e.target.value)} className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm outline-none focus:border-orange-500 font-bold transition-colors" placeholder="Ej. 15.50" />
+                <label className="block text-xs font-extrabold text-gray-700 uppercase mb-2">2. Nuevo precio rebajado ($)</label>
+                <input type="number" step="0.01" min="0" required value={price} onChange={e => setPrice(e.target.value)} className="w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-lg outline-none focus:border-orange-500 font-bold transition-colors" placeholder="Ej. 15.50" />
              </div>
           </div>
 
-          <div className="flex gap-3">
-            <button type="button" onClick={onClose} className="flex-1 rounded-xl bg-gray-100 px-4 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-200 transition-colors">Cancelar</button>
-            <button type="submit" className="flex-1 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-orange-600 transition-all shadow-md shadow-orange-500/20">Generar Oferta</button>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose} className="flex-1 rounded-xl bg-gray-100 px-4 py-3 text-sm font-bold text-gray-600 hover:bg-gray-200 transition-colors cursor-pointer">Cancelar</button>
+            <button type="submit" className="flex-1 rounded-xl bg-orange-500 px-4 py-3 text-sm font-bold text-white hover:bg-orange-600 transition-all shadow-lg shadow-orange-500/30 cursor-pointer">Confirmar Oferta</button>
           </div>
         </form>
       </div>
     </ModalWrapper>
   );
 }
-
 export function DeleteConfirmModal({
   isOpen,
   productName,

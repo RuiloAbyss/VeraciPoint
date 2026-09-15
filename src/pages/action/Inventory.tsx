@@ -6,6 +6,7 @@ import { ProductCard } from "../../components/ProductCard";
 import { BulkProductCard } from "../../components/BulkProductCard";
 import { ProductFormModal, RestockModal, DeactivateModal, OfferModal, DeleteConfirmModal } from "../../components/InventoryModals";
 import { fetchProducts, restockProduct, deactivateProduct, activateProduct, discardStock, uploadPhoto, editProduct, createProduct, type Product } from "../../services/productService";
+import { fetchProviders, addProvider } from "../../services/orderService"; 
 import { useLoading } from "../../components/LoadingContext"; 
 
 export function Inventory() {
@@ -14,6 +15,7 @@ export function Inventory() {
   
   const [isAdmin, setIsAdmin] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
+  const [providersList, setProvidersList] = useState<any[]>([]); 
   const [isLoading, setIsLoading] = useState(true); 
   const [activeTab, setActiveTab] = useState<'regular' | 'bulk'>('regular');
   const [toast, setToast] = useState<{ msg: string, type: 'success' | 'cancel' | 'delete' | 'error' } | null>(null);
@@ -25,15 +27,27 @@ export function Inventory() {
   const [stockFilter, setStockFilter] = useState("Niveles de Stock");
   const [sortOrder, setSortOrder] = useState("Ordenar: A-Z");
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [modalState, setModalState] = useState<'none' | 'edit' | 'create' | 'restock' | 'deactivate' | 'offer'>('none');
+  
+  const [modalState, setModalState] = useState<'none' | 'edit' | 'create' | 'restock' | 'deactivate' | 'offer' | 'clone'>('none');
 
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null); 
 
-  const [currentRegularPage, setCurrentRegularPage] = useState(1);
-  const [currentBulkPage, setCurrentBulkPage] = useState(1);
-  const itemsPerPage = 30;
+  // CORRECCIÓN: Limpieza del timeout al desmontar para evitar colapsos de navegación
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (modalState === 'none') {
+        searchInputRef.current?.focus();
+      } else {
+        const modalInput = document.querySelector('div[role="dialog"] input, form input') as HTMLInputElement;
+        if (modalInput) modalInput.focus();
+      }
+    }, 150);
+
+    return () => clearTimeout(timeout);
+  }, [modalState]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -59,8 +73,9 @@ export function Inventory() {
   const loadData = async () => {
     setIsLoading(true);
     try { 
-      const data = await fetchProducts();
+      const [data, provs] = await Promise.all([fetchProducts(), fetchProviders().catch(() => [])]);
       setProducts(Array.isArray(data) ? data : []); 
+      setProvidersList(provs || []);
     } 
     catch (error: any) { 
       setErrorModal({ isOpen: true, title: "Error al cargar inventario", details: String(error) }); 
@@ -77,11 +92,15 @@ export function Inventory() {
   const safeProducts = useMemo(() => Array.isArray(products) ? products : [], [products]);
 
   const uniqueCategories = useMemo(() => {
-    const rawCats = Array.from(new Set(safeProducts.map(p => p.category || "Sin Categoría")))
+    const rawCats = new Set([
+        ...safeProducts.map(p => p.category || "Sin Categoría"),
+        ...providersList.map(p => p.name)
+    ]);
+    const filteredCats = Array.from(rawCats)
       .filter(c => c !== "Categoría" && c !== "Todas las Categorías" && c !== "Ofertas")
       .sort((a, b) => a.localeCompare(b));
-    return ["Categoría", "Ofertas", ...rawCats];
-  }, [safeProducts]);
+    return ["Categoría", "Ofertas", ...filteredCats];
+  }, [safeProducts, providersList]);
 
   const filteredCategories = useMemo(() => {
     if (!categorySearch) return uniqueCategories;
@@ -160,6 +179,11 @@ export function Inventory() {
     if (!selectedId || !selectedProduct) return;
     setLoading(true);
     try {
+      const ofertasExists = providersList.some(p => p.name === "Ofertas") || safeProducts.some(p => p.category === "Ofertas");
+      if (!ofertasExists) {
+          try { await addProvider("Ofertas", "Categoría automática", ""); } catch (e) {}
+      }
+
       await discardStock(selectedId, qty);
       const existingOffer = safeProducts.find(p => p.name === selectedProduct.name && p.category === "Ofertas" && p.status === 0);
 
@@ -220,10 +244,11 @@ export function Inventory() {
     setLoading(true);
     try {
       const code = data.barcode ? data.barcode.trim() : null;
-      if (modalState === 'create') {
+      
+      if (modalState === 'create' || modalState === 'clone') {
         const newId = await createProduct(data.name, data.price, data.category, code, data.sellformat, data.quantity, data.minStock, data.maxStock);
         if (data.newPhotoBase64) await uploadPhoto(newId, data.newPhotoBase64);
-        showToast("Producto registrado exitosamente", "success");
+        showToast(modalState === 'clone' ? "Producto clonado exitosamente" : "Producto registrado exitosamente", "success");
       } else {
         if (!selectedId || !selectedProduct) return;
         const currentCode = selectedProduct.barcode || null;
@@ -327,8 +352,24 @@ export function Inventory() {
       </header>
 
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 rounded-xl bg-white border border-gray-200 p-3 shadow-sm shrink-0">
-        <div className="flex-1 w-full min-w-0">
-          <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="🔍 Buscar nombre o código..." className="w-full rounded-lg bg-gray-50 px-4 py-2 text-sm outline-none border border-gray-200 focus:border-primary" />
+        <div className="relative flex-1 w-full min-w-0">
+          <input 
+            ref={searchInputRef}
+            type="text" 
+            value={searchTerm} 
+            onChange={(e) => setSearchTerm(e.target.value)} 
+            placeholder="🔍 Buscar nombre o código..." 
+            className="w-full rounded-lg bg-gray-50 px-4 py-2 pr-10 text-sm outline-none border border-gray-200 focus:border-primary" 
+          />
+          {searchTerm && (
+            <button 
+              type="button" 
+              onClick={() => { setSearchTerm(""); searchInputRef.current?.focus(); }} 
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 font-bold"
+            >
+              ✕
+            </button>
+          )}
         </div>
         
         <div className="hidden lg:block w-px h-8 bg-gray-200 mx-1" />
@@ -398,7 +439,7 @@ export function Inventory() {
 
         <div className="hidden lg:block w-px h-8 bg-gray-200 mx-1" />
         
-        <div className={`grid ${selectedProduct?.status === 0 ? "grid-cols-1" : "grid-cols-2 lg:grid-cols-4"} gap-2 w-full lg:w-auto transition-opacity duration-300 ${selectedProduct ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
+        <div className={`grid ${selectedProduct?.status === 0 ? "grid-cols-1" : "grid-cols-2 lg:grid-cols-5"} gap-2 w-full lg:w-auto transition-opacity duration-300 ${selectedProduct ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
           {selectedProduct?.status === 0 ? (
             <button onClick={executeActivate} className="w-full rounded-lg bg-green-100 hover:bg-green-500 hover:text-white py-2 px-6 text-xs font-bold text-green-700 shadow-sm cursor-pointer transition-colors">⬆️ Dar de Alta</button>
           ) : (
@@ -406,6 +447,7 @@ export function Inventory() {
               <button onClick={() => setModalState('restock')} className="w-full rounded-lg bg-primary/10 hover:bg-primary hover:text-white py-2 text-xs font-bold  border border-primary text-primary shadow-sm cursor-pointer">+ Surtir</button>
               <button disabled={!isAdmin} onClick={() => setModalState('offer')} className={`w-full rounded-lg py-2 text-xs font-bold shadow-sm ${isAdmin ? "bg-white border border-orange-200 text-orange-600 hover:ring-2 hover:ring-orange-400 cursor-pointer transition-all" : "bg-gray-100 text-gray-400"}`}>🏷️ Ofertar</button>
               <button disabled={!isAdmin} onClick={() => setModalState('edit')} className={`w-full rounded-lg py-2 text-xs font-bold shadow-sm ${isAdmin ? "bg-white border border-gray-300 text-gray-700 hover:ring-2 hover:ring-gray-400 cursor-pointer transition-all" : "bg-gray-100 text-gray-400"}`}>✏️ Editar</button>
+              <button disabled={!isAdmin} onClick={() => setModalState('clone')} className={`w-full rounded-lg py-2 text-xs font-bold shadow-sm ${isAdmin ? "bg-white border border-blue-200 text-blue-600 hover:ring-2 hover:ring-blue-400 cursor-pointer transition-all" : "bg-gray-100 text-gray-400"}`}>📑 Clonar</button>
               <button disabled={!isAdmin} onClick={() => setModalState('deactivate')} className={`w-full rounded-lg py-2 text-xs font-bold shadow-sm ${isAdmin ? "bg-white border border-red-200 text-red-600 hover:ring-2 hover:ring-red-400 cursor-pointer transition-all" : "bg-gray-100 text-gray-400"}`}>🗑️ Baja</button>
             </>
           )}
@@ -414,7 +456,7 @@ export function Inventory() {
 
       <div className="flex lg:hidden bg-gray-200 rounded-xl p-1 shrink-0">
         <button onClick={() => setActiveTab('regular')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer ${activeTab === 'regular' ? 'bg-white shadow-sm text-primary' : 'text-gray-500'}`}>Registrados ({regularProducts.length})</button>
-        <button onClick={() => setActiveTab('bulk')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer ${activeTab === 'bulk' ? 'bg-white shadow-sm text-primary' : 'text-gray-500'}`}>A Granel ({bulkProducts.length})</button>
+        <button onClick={() => setActiveTab('bulk')} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer ${activeTab === 'bulk' ? 'bg-white shadow-sm text-primary' : 'text-gray-500'}`}>Productos sin Clave ({bulkProducts.length})</button>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
@@ -446,8 +488,8 @@ export function Inventory() {
 
         <section className={`flex-col lg:w-[45%] xl:w-[40%] rounded-2xl bg-gray-100/50 border border-gray-200 p-4 overflow-hidden ${activeTab === 'bulk' ? 'flex' : 'hidden lg:flex'}`}>
           <h2 className="hidden lg:flex text-lg font-bold text-gray-900 mb-3 border-b border-gray-200 pb-2 justify-between items-center shrink-0">
-            Sin Clave (Pesaje)
-            <span className="text-xs font-extrabold text-primary bg-orange-50 px-3 py-1 rounded-full uppercase tracking-wide">{bulkProducts.length} A Granel</span>
+            Productos sin Clave
+            <span className="text-xs font-extrabold text-primary bg-orange-50 px-3 py-1 rounded-full uppercase tracking-wide">{bulkProducts.length} Sin Clave</span>
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 overflow-y-auto pr-1 flex-1 custom-scrollbar content-start">
             {isLoading ? <div className="col-span-full p-4 text-center font-bold text-gray-500">Cargando...</div> : 
@@ -458,7 +500,8 @@ export function Inventory() {
                     key={prod.id} 
                     category={prod.category} 
                     name={prod.name || ""} 
-                    pricePerKg={Number(prod.price) || 0} 
+                    pricePerKg={Number(prod.price) || 0}
+                    sellformat={prod.sellformat}
                     stock={Number(prod.stock) || 0} 
                     minStock={prod.minStock} 
                     status={prod.status} 
@@ -474,22 +517,34 @@ export function Inventory() {
         </section>
       </div>
 
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {toast && (
-          <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <motion.div key="toast-message" initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
             <div className={`px-6 py-3 rounded-full shadow-xl font-bold text-sm flex items-center gap-2 ${toast.type === 'success' ? 'bg-green-500 text-white' : toast.type === 'cancel' ? 'bg-yellow-400 text-yellow-900' : 'bg-red-500 text-white'}`}>{toast.msg}</div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {(modalState === 'edit' || modalState === 'create') && <ProductFormModal isOpen={true} product={selectedProduct} categories={formCategories} onClose={closeModals} onSave={executeFormSave} />}
-        {modalState === 'restock' && <RestockModal isOpen={true} product={selectedProduct} onClose={closeModals} onConfirm={executeRestock} />}
-        {modalState === 'deactivate' && <DeactivateModal isOpen={true} product={selectedProduct} onClose={closeModals} onConfirm={executeDeactivate} />}
-        {modalState === 'offer' && <OfferModal isOpen={true} product={selectedProduct} onClose={closeModals} onConfirm={executeOffer} />}
+      <AnimatePresence mode="wait">
+        {/* CORRECCIÓN: Agregar explícitamente "key" a cada renderizado condicional para evitar que Framer Motion crashee en PopChildMeasure */}
+        {(modalState === 'edit' || modalState === 'create' || modalState === 'clone') && (
+          <ProductFormModal 
+            key="modal-form"
+            isOpen={true} 
+            mode={modalState === 'edit' ? 'edit' : modalState === 'clone' ? 'clone' : 'create'}
+            product={modalState === 'create' ? null : selectedProduct} 
+            categories={formCategories} 
+            onClose={closeModals} 
+            onSave={executeFormSave} 
+          />
+        )}
+        {modalState === 'restock' && <RestockModal key="modal-restock" isOpen={true} product={selectedProduct} onClose={closeModals} onConfirm={executeRestock} />}
+        {modalState === 'deactivate' && <DeactivateModal key="modal-deactivate" isOpen={true} product={selectedProduct} onClose={closeModals} onConfirm={executeDeactivate} />}
+        {modalState === 'offer' && <OfferModal key="modal-offer" isOpen={true} product={selectedProduct} onClose={closeModals} onConfirm={executeOffer} />}
         
         {isDeleteModalOpen && selectedProduct && (
           <DeleteConfirmModal
+            key="modal-delete"
             isOpen={isDeleteModalOpen}
             productName={selectedProduct.name}
             onClose={() => setIsDeleteModalOpen(false)}
@@ -498,9 +553,10 @@ export function Inventory() {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
+        {/* CORRECCIÓN: El contenedor padre condicional debe ser <motion.div> en vez de <div> ordinario */}
         {errorModal.isOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <motion.div key="modal-error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg flex flex-col gap-4 border border-gray-100">
               <div className="flex items-center gap-3 text-red-500 border-b border-gray-100 pb-3">
                 <span className="text-3xl">⚠️</span>
@@ -513,7 +569,7 @@ export function Inventory() {
                 <button onClick={() => setErrorModal({ isOpen: false, title: "", details: "" })} className="bg-gray-900 text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-gray-800 transition-colors shadow-lg cursor-pointer">Cerrar</button>
               </div>
             </motion.div>
-          </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </motion.div>

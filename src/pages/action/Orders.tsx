@@ -43,7 +43,6 @@ export function Orders() {
   const [isExtraPanelOpen, setIsExtraPanelOpen] = useState(false);
   const [extraSearch, setExtraSearch] = useState("");
 
-  // Nuevo estado para el filtro de fecha
   const [dateFilter, setDateFilter] = useState("");
 
   const showToastMsg = (msg: string, type: 'success' | 'error') => {
@@ -97,7 +96,6 @@ export function Orders() {
         const userIsAdmin = Boolean(parsed.isAdmin ?? parsed.is_admin);
         setIsAdmin(userIsAdmin);
         
-        // Si no es admin, forzar la vista de historial de pedidos
         if (!userIsAdmin) {
             setActiveTab('history');
         }
@@ -134,7 +132,6 @@ export function Orders() {
     return availableProductsForActiveOrder.filter(p => p.name.toLowerCase().includes(extraSearch.toLowerCase()));
   }, [availableProductsForActiveOrder, extraSearch]);
 
-  // Filtro de fecha para los pedidos
   const filteredOrders = useMemo(() => {
     if (!dateFilter) return orders;
     return orders.filter(o => o.createdAt && o.createdAt.startsWith(dateFilter));
@@ -152,9 +149,11 @@ export function Orders() {
     });
   };
 
+  // Issue 2: Truncamiento al pasar 9999
   const updateCart = (id: number, val: string) => {
     const cleanVal = val.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
-    const num = cleanVal === "" ? 0 : parseFloat(cleanVal);
+    let num = cleanVal === "" ? 0 : parseFloat(cleanVal);
+    if (num > 9999) num = 9999;
     setCart(prev => prev.map(i => i.productId === id ? { ...i, expectedQty: num } : i));
   };
 
@@ -191,9 +190,11 @@ export function Orders() {
     } finally { setLoading(false); }
   };
 
+  // Issue 2: Truncamiento al pasar 9999
   const updateActiveDetail = (id: number, val: string) => {
     const cleanVal = val.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
-    const num = cleanVal === "" ? 0 : parseFloat(cleanVal);
+    let num = cleanVal === "" ? 0 : parseFloat(cleanVal);
+    if (num > 9999) num = 9999;
     setActiveDetails(prev => prev.map(i => i.productId === id ? { ...i, receivedQty: num } : i));
   };
 
@@ -404,8 +405,15 @@ export function Orders() {
                             </p>
                         )}
                     </div>
-                    <div className="flex gap-2 items-center flex-1 justify-end ml-4">
-                        <input type="text" placeholder="Filtrar catálogo..." value={searchProd} onChange={e => setSearchProd(e.target.value)} className="w-full max-w-[200px] rounded-lg bg-gray-50 px-3 py-2 text-sm outline-none border border-gray-200 focus:border-primary" />
+                    
+                    {/* Issue 6: Botón en Search Prod */}
+                    <div className="relative flex gap-2 items-center flex-1 justify-end ml-4">
+                        <div className="relative w-full max-w-[200px]">
+                            <input type="text" placeholder="Filtrar catálogo..." value={searchProd} onChange={e => setSearchProd(e.target.value)} className="w-full rounded-lg bg-gray-50 px-3 py-2 pr-8 text-sm outline-none border border-gray-200 focus:border-primary" />
+                            {searchProd && (
+                                <button type="button" onClick={() => setSearchProd("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 font-bold">✕</button>
+                            )}
+                        </div>
                         <button onClick={() => setIsProductModalOpen(true)} className="bg-gray-900 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-md hover:bg-gray-800 cursor-pointer whitespace-nowrap">+ Alta Producto</button>
                     </div>
                   </div>
@@ -526,7 +534,6 @@ export function Orders() {
         )}
       </div>
 
-      {/* MODAL GESTION DE ORDEN EXPANDIBLE */}
       <AnimatePresence>
         {activeOrder && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -655,13 +662,21 @@ export function Orders() {
                               className="border-l border-gray-100 pl-6 flex flex-col shrink-0"
                           >
                               <h4 className="text-sm font-extrabold text-gray-900 mb-3 truncate">Catálogo de {activeOrder.provider}</h4>
-                              <input 
-                                  type="text" 
-                                  placeholder="Buscar producto..." 
-                                  value={extraSearch} 
-                                  onChange={e => setExtraSearch(e.target.value)} 
-                                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary font-bold mb-3 transition-colors" 
-                              />
+                              
+                              {/* Issue 6: Botón clear en Búsqueda Extra */}
+                              <div className="relative mb-3">
+                                  <input 
+                                      type="text" 
+                                      placeholder="Buscar producto..." 
+                                      value={extraSearch} 
+                                      onChange={e => setExtraSearch(e.target.value)} 
+                                      className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 pr-8 text-sm outline-none focus:border-primary font-bold transition-colors" 
+                                  />
+                                  {extraSearch && (
+                                      <button type="button" onClick={() => setExtraSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 font-bold">✕</button>
+                                  )}
+                              </div>
+
                               <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-2">
                                   {filteredExtraProducts.length > 0 ? (
                                       filteredExtraProducts.map(ap => (
@@ -693,7 +708,6 @@ export function Orders() {
         )}
       </AnimatePresence>
 
-      {/* MODAL ALTA/EDICIÓN DE PROVEEDOR */}
       <AnimatePresence>
         {providerModal.isOpen && (
           <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -722,7 +736,6 @@ export function Orders() {
         )}
       </AnimatePresence>
 
-      {/* MODAL CANCELAR PEDIDO */}
       <AnimatePresence>
         {isCancelModalOpen && (
           <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -743,7 +756,6 @@ export function Orders() {
         )}
       </AnimatePresence>
 
-      {/* MODAL ALTA PRODUCTO */}
       <AnimatePresence>
         {isProductModalOpen && (
            <div className="relative z-[80]">

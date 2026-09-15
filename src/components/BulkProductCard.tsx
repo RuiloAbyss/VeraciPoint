@@ -2,6 +2,7 @@ export interface BulkProductCardProps {
   name: string;
   category?: string;
   pricePerKg: number;
+  sellformat?: string; 
   stock: number;
   minStock?: number | null;
   status?: number;
@@ -11,15 +12,20 @@ export interface BulkProductCardProps {
   onClick: () => void;
 }
 
-export function BulkProductCard({ name, category, pricePerKg, stock, minStock, status, photo, isSelected, originalPrice, onClick }: BulkProductCardProps) {
+export function BulkProductCard({ name, category, pricePerKg, sellformat, stock, minStock, status, photo, isSelected, originalPrice, onClick }: BulkProductCardProps) {
   const cleanPhoto = photo ? photo.replace(/\s+/g, '') : null;
   const isOutOfStock = stock <= 0;
   const isLowStock = minStock !== null && minStock !== undefined && stock < minStock && stock > 0;
   const stockColor = isOutOfStock ? "text-red-600" : isLowStock ? "text-orange-500" : "text-gray-500";
 
   const isOffer = category === "Ofertas";
+  
+  // Lógica para detectar si es pieza o kilo
+  const isPieza = sellformat?.toLowerCase() === "pieza";
+  const unitLabel = isPieza ? "pza" : "kg";
+  const stockFormat = isPieza ? stock.toFixed(0) : stock.toFixed(3);
 
-  // Estética estrictamente original con inyección naranja solo para ofertas
+  // Estética con inyección naranja solo para ofertas
   const cardClass = `group flex flex-col items-center rounded-xl p-2 transition-all text-center cursor-pointer border ${status === 0 ? "opacity-60 grayscale" : ""} ${
     isSelected 
       ? (isOffer ? "border-orange-500 bg-orange-50 shadow-md" : "border-primary bg-primary/5 shadow-md") 
@@ -36,11 +42,13 @@ export function BulkProductCard({ name, category, pricePerKg, stock, minStock, s
         {status === 0 && "⛔ "}{name}
       </p>
       <div className="flex flex-col items-center mt-1">
-        {isOffer && originalPrice && (
-            <span className="text-[10px] text-gray-400 line-through">${originalPrice.toFixed(2)}/kg</span>
+        {isOffer && originalPrice !== undefined && (
+            <span className="text-[10px] text-gray-400 line-through">${originalPrice.toFixed(2)}/{unitLabel}</span>
         )}
-        <p className={`font-bold text-sm ${isOffer ? "text-orange-600" : "text-primary"}`}>${pricePerKg.toFixed(2)}/kg</p>
-        <p className={`font-bold text-[10px] uppercase tracking-wide ${stockColor}`}>Aprox. {stock.toFixed(3)} Kg.</p>
+        <p className={`font-bold text-sm ${isOffer ? "text-orange-600" : "text-primary"}`}>${pricePerKg.toFixed(2)}/{unitLabel}</p>
+        <p className={`font-bold text-[10px] uppercase tracking-wide ${stockColor}`}>
+          {isPieza ? `${stockFormat} Pzas.` : `Aprox. ${stockFormat} Kg.`}
+        </p>
       </div>
     </button>
   );
