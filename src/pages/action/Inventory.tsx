@@ -27,6 +27,9 @@ export function Inventory() {
   const [stockFilter, setStockFilter] = useState("Niveles de Stock");
   const [sortOrder, setSortOrder] = useState("Ordenar: A-Z");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const itemsPerPage = 12;
+  const [currentRegularPage, setCurrentRegularPage] = useState(1);
+  const [currentBulkPage, setCurrentBulkPage] = useState(1);
   
   const [modalState, setModalState] = useState<'none' | 'edit' | 'create' | 'restock' | 'deactivate' | 'offer' | 'clone'>('none');
 
@@ -563,7 +566,7 @@ export function Inventory() {
                 <h3 className="text-xl font-extrabold text-gray-900">{errorModal.title}</h3>
               </div>
               <div className="bg-red-50/50 p-4 rounded-xl border border-red-100 max-h-64 overflow-y-auto custom-scrollbar">
-                <pre className="text-xs text-red-800 whitespace-pre-wrap font-mono break-words">{errorModal.details}</pre>
+                <pre className="text-xs text-red-800 whitespace-pre-wrap font-mono wrap-break-word">{errorModal.details}</pre>
               </div>
               <div className="flex justify-end pt-2">
                 <button onClick={() => setErrorModal({ isOpen: false, title: "", details: "" })} className="bg-gray-900 text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-gray-800 transition-colors shadow-lg cursor-pointer">Cerrar</button>
