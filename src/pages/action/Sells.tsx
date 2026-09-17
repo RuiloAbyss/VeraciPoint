@@ -41,6 +41,13 @@ export function Sells() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 30; 
+  const cartEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (cartEndRef.current) {
+      cartEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [cart]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -116,7 +123,7 @@ export function Sells() {
     return result.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   }, [safeProducts, searchTerm, categoryFilter]);
 
-  const regularProducts = filteredProducts.filter(p => p.barcode !== null && p.barcode !== undefined);
+  const regularProducts = filteredProducts;
   const bulkProducts = filteredProducts.filter(p => p.barcode === null || p.barcode === undefined);
 
   const targetList = activeTab === 'regular' ? regularProducts : bulkProducts;
@@ -345,7 +352,7 @@ export function Sells() {
             
             <div className="flex flex-col sm:flex-row bg-gray-200 rounded-xl p-1 shrink-0 gap-1 sm:gap-0">
                 <button onClick={() => setActiveTab('regular')} className={`flex-1 py-1.5 lg:py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors cursor-pointer ${activeTab === 'regular' ? 'bg-white shadow-sm text-primary' : 'text-gray-500'}`}>Registrados</button>
-                <button onClick={() => setActiveTab('bulk')} className={`flex-1 py-1.5 lg:py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors cursor-pointer ${activeTab === 'bulk' ? 'bg-white shadow-sm text-primary' : 'text-gray-500'}`}>A Granel</button>
+                <button onClick={() => setActiveTab('bulk')} className={`flex-1 py-1.5 lg:py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors cursor-pointer ${activeTab === 'bulk' ? 'bg-white shadow-sm text-primary' : 'text-gray-500'}`}>Productos sin Clave</button>
             </div>
 
             <section className="flex-col flex-1 rounded-2xl bg-gray-100/50 border border-gray-200 p-2 lg:p-3 overflow-hidden flex">
@@ -420,41 +427,57 @@ export function Sells() {
                     <p className="font-bold text-gray-500 text-xs lg:text-sm text-center">Vacío</p>
                 </div>
             ) : (
-                cart.map(item => {
-                    const isPieza = item.product.sellformat?.toLowerCase() === 'pieza';
-                    const isExceeded = (Number(item.quantity) || 0) > (Number(item.product.stock) || 0);
+                <>
+                  {cart.map(item => {
+                      const isPieza = item.product.sellformat?.toLowerCase() === 'pieza';
+                      const isExceeded = (Number(item.quantity) || 0) > (Number(item.product.stock) || 0);
 
-                    return (
-                    <div key={item.product.id} className={`flex flex-col gap-1 lg:gap-2 p-2 lg:p-3 rounded-xl border bg-gray-50/50 relative group transition-colors ${isExceeded ? 'border-orange-500 ring-1 ring-orange-500/50 shadow-sm' : 'border-gray-200'}`}>
-                        <div className="flex justify-between items-start mt-1">
-                            <div className="flex-1 pr-5">
-                                <div className="flex flex-wrap items-center gap-1 mb-0.5">
-                                    <p className="font-bold text-xs lg:text-sm text-gray-900 leading-tight truncate">{item.product.name}</p>
-                                    <span className="text-[8px] lg:text-[9px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full uppercase font-bold tracking-wider">{isPieza ? 'PZA' : 'KG'}</span>
-                                </div>
-                                <p className="text-[9px] lg:text-[10px] font-bold text-gray-400">P. Unit: ${(Number(item.product.price) || 0).toFixed(2)}</p>
-                            </div>
-                            <button onClick={() => removeFromCart(item.product.id)} className="absolute top-1 right-1 lg:top-2 lg:right-2 w-5 h-5 lg:w-6 lg:h-6 flex items-center justify-center rounded-full bg-red-100 text-red-500 hover:bg-red-500 hover:text-white transition-colors cursor-pointer text-xs">✕</button>
-                        </div>
-                        
-                        <div className="flex gap-1 lg:gap-2 items-center mt-1">
-                            <div className="flex-[0.8] flex flex-col min-w-0">
-                                <label className="text-[8px] lg:text-[9px] font-bold text-gray-400 uppercase truncate">Cant</label>
-                                <input type="number" min={isPieza ? "1" : "0"} step={isPieza ? "1" : "0.001"} value={item.quantity ?? ""} onChange={e => updateCartItem(item.product.id, 'quantity', e.target.value)} className="w-full rounded-md border border-gray-300 px-1 py-1 text-xs font-bold text-center outline-none focus:border-primary min-w-0" />
-                            </div>
-                            <span className="text-gray-300 font-bold mt-3 lg:mt-4 text-xs">x</span>
-                            <div className="flex-[0.8] flex flex-col min-w-0">
-                                <label className="text-[8px] lg:text-[9px] font-bold text-gray-400 uppercase truncate">Precio (Kg/Pz) $</label>
-                                <input type="number" min="0" step="0.01" value={item.finalPrice ?? ""} onChange={e => updateCartItem(item.product.id, 'finalPrice', e.target.value)} disabled={!isAdmin} className="w-full rounded-md border border-gray-300 px-1 py-1 text-xs font-bold text-center outline-none focus:border-primary disabled:bg-gray-100 disabled:text-gray-500 disabled:border-transparent min-w-0" />
-                            </div>
-                            <span className="text-gray-300 font-bold mt-3 lg:mt-4 text-xs">=</span>
-                            <div className="flex-1 flex flex-col items-end pt-3 lg:pt-4 min-w-0">
-                                <span className="font-extrabold text-primary text-xs lg:text-sm truncate">${((Number(item.quantity) || 0) * (Number(item.finalPrice) || 0)).toFixed(2)}</span>
-                            </div>
-                        </div>
-                    </div>
-                )
-                })
+                      return (
+                      <div key={item.product.id} className={`flex items-center gap-2 p-2 rounded-xl border bg-gray-50/50 relative group transition-colors ${isExceeded ? 'border-orange-500 ring-1 ring-orange-500/50 shadow-sm' : 'border-gray-200'}`}>
+                          
+                          {/* Información del producto */}
+                          <div className="flex-1 min-w-0 flex flex-col justify-center">
+                              <p className="font-bold text-[10px] lg:text-xs text-gray-900 leading-tight truncate">{item.product.name}</p>
+                              <p className="text-[9px] font-bold text-gray-400">
+                                  ${(Number(item.product.price) || 0).toFixed(2)} {isPieza ? 'PZA' : 'KG'}
+                              </p>
+                          </div>
+                          
+                          {/* Entradas de cantidad y precio */}
+                          <div className="flex items-center gap-1 shrink-0">
+                              <input 
+                                  type="number" min={isPieza ? "1" : "0"} step={isPieza ? "1" : "0.001"} 
+                                  value={item.quantity ?? ""} onChange={e => updateCartItem(item.product.id, 'quantity', e.target.value)} 
+                                  className="w-12 lg:w-14 rounded-md border border-gray-300 px-1 py-1 text-[10px] lg:text-xs font-bold text-center outline-none focus:border-primary" 
+                                  title="Cantidad"
+                              />
+                              <span className="text-gray-300 font-bold text-[10px] lg:text-xs">x</span>
+                              <input 
+                                  type="number" min="0" step="0.01" 
+                                  value={item.finalPrice ?? ""} onChange={e => updateCartItem(item.product.id, 'finalPrice', e.target.value)} 
+                                  disabled={!isAdmin} 
+                                  className="w-14 lg:w-16 rounded-md border border-gray-300 px-1 py-1 text-[10px] lg:text-xs font-bold text-center outline-none focus:border-primary disabled:bg-gray-100 disabled:text-gray-500 disabled:border-transparent" 
+                                  title="Precio Unitario"
+                              />
+                          </div>
+
+                          {/* Total y botón de eliminar */}
+                          <div className="flex items-center gap-2 shrink-0 w-16 lg:w-20 justify-end">
+                              <span className="font-extrabold text-primary text-[10px] lg:text-xs truncate">
+                                  ${((Number(item.quantity) || 0) * (Number(item.finalPrice) || 0)).toFixed(2)}
+                              </span>
+                              <button 
+                                onClick={() => removeFromCart(item.product.id)} 
+                                className="w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-full bg-red-100 text-red-500 hover:bg-red-500 hover:text-white transition-colors cursor-pointer text-[10px]"
+                              >
+                                ✕
+                              </button>
+                          </div>
+                      </div>
+                      )
+                  })}
+                  <div ref={cartEndRef} />
+                </>
             )}
           </div>
 

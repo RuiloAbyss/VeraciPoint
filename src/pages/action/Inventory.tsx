@@ -148,7 +148,7 @@ export function Inventory() {
     return result;
   }, [safeProducts, searchTerm, categoryFilter, stockFilter, sortOrder]);
 
-  const regularProducts = filteredProducts.filter(p => p.barcode !== null && p.barcode !== undefined);
+  const regularProducts = filteredProducts;
   const bulkProducts = filteredProducts.filter(p => p.barcode === null || p.barcode === undefined);
   
   const rawSelectedProduct = safeProducts.find(p => p.id === selectedId) || null;

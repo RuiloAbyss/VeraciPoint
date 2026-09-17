@@ -262,10 +262,14 @@ export function Orders() {
   const handleCreateProduct = async (data: any) => {
     setLoading(true);
     try {
-      const code = data.barcode ? parseInt(data.barcode) : null;
+      // CORRECCIÓN: Usamos .trim() para pasarlo como texto, igual que en Inventory.tsx
+      const code = data.barcode ? String(data.barcode).trim() : null;
+      
       const cat = selectedProvider || activeOrder?.provider || data.category;
       const newId = await createProduct(data.name, data.price, cat, code, data.sellformat, data.quantity, data.minStock, data.maxStock);
+      
       if (data.newPhotoBase64) await uploadPhoto(newId, data.newPhotoBase64);
+      
       setIsProductModalOpen(false);
       await loadData();
       showToastMsg("Producto añadido exitosamente", 'success');
@@ -273,7 +277,7 @@ export function Orders() {
       showToastMsg("Error al crear producto", 'error');
     } finally { setLoading(false); }
   };
-
+  
   const handleSaveProvider = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = providerModal.name.trim();
