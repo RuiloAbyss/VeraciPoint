@@ -25,23 +25,53 @@ export function Sells() {
   const [activeTab, setActiveTab] = useState<'regular' | 'bulk'>('regular');
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("Categoría");
-  const [cart, setCart] = useState<CartItem[]>([]);
   const [toast, setToast] = useState<{ msg: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [isClearCartModalOpen, setIsClearCartModalOpen] = useState(false);
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
+  
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const cartEndRef = useRef<HTMLDivElement>(null);
+
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [quickProduct, setQuickProduct] = useState({ name: '', sellformat: 'Pieza', barcode: '', price: '' });
 
-  // Estados del Modal de Checkout
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [isCash, setIsCash] = useState(true);
   const [amountReceived, setAmountReceived] = useState<string>("");
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 30; 
-  const cartEndRef = useRef<HTMLDivElement>(null);
+
+  // Memoria del Carrito Persistente
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    try {
+      const saved = localStorage.getItem("pos_cart");
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("pos_cart", JSON.stringify(cart));
+  }, [cart]);
+
+  // Auto-focus inteligente al empezar a teclear
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (isCheckoutModalOpen || isClearCartModalOpen || isQuickAddOpen || errorModal.isOpen) return;
+      
+      const target = e.target as HTMLElement;
+      const tag = target.tagName.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [isCheckoutModalOpen, isClearCartModalOpen, isQuickAddOpen, errorModal.isOpen]);
 
   useEffect(() => {
     if (cartEndRef.current) {
@@ -106,7 +136,6 @@ export function Sells() {
   }, [uniqueCategories, categorySearch]);
 
   const filteredProducts = useMemo(() => {
-    // CORRECCIÓN: Se eliminó `&& (Number(p.stock) || 0) > 0` para mostrar productos sin importar su stock
     let result = safeProducts.filter(p => p.status !== 0);
     
     if (searchTerm) {
@@ -123,7 +152,7 @@ export function Sells() {
     return result.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   }, [safeProducts, searchTerm, categoryFilter]);
 
-  const regularProducts = filteredProducts;
+  const regularProducts = filteredProducts.filter(p => p.barcode !== null && p.barcode !== undefined);
   const bulkProducts = filteredProducts.filter(p => p.barcode === null || p.barcode === undefined);
 
   const targetList = activeTab === 'regular' ? regularProducts : bulkProducts;
@@ -132,7 +161,7 @@ export function Sells() {
 
   const cartTotal = cart.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.finalPrice) || 0)), 0);
 
-  const exactTotalWithFee = isCash ? cartTotal : cartTotal * 1.04;
+  const exactTotalWithFee = isCash ? cartTotal : cartTotal * 1;
   const decimalPart = exactTotalWithFee - Math.floor(exactTotalWithFee);
   const finalRoundedTotal = Number(decimalPart.toFixed(4)) >= 0.60 
       ? Math.ceil(exactTotalWithFee) 
@@ -154,7 +183,7 @@ export function Sells() {
       category: "Registro Rápido",
       status: 1
     };
-    addToCart(tempProduct);
+    handleProductSelect(tempProduct);
     setQuickProduct({ name: '', sellformat: 'Pieza', barcode: '', price: '' });
     setIsQuickAddOpen(false);
   };
@@ -163,22 +192,29 @@ export function Sells() {
     if (e.key === 'Enter') {
         e.preventDefault();
         if (targetList.length > 0) {
-            addToCart(targetList[0]);
-            setSearchTerm("");
+            handleProductSelect(targetList[0]);
         } else {
-            showToast("No se encontró el producto", "error");
+            const alternativeList = activeTab === 'regular' ? bulkProducts : regularProducts;
+            if (alternativeList.length > 0) {
+                handleProductSelect(alternativeList[0]);
+                showToast(`Producto agregado desde ${activeTab === 'regular' ? 'A Granel' : 'Registrados'}`, "info");
+            } else {
+                showToast("No se encontró el producto", "error");
+            }
         }
     }
   };
 
-  const addToCart = (product: Product) => {
+  const handleProductSelect = (prod: Product) => {
     setCart(prev => {
-      const existing = prev.find(item => item.product.id === product.id);
+      const existing = prev.find(item => item.product.id === prod.id);
       if (existing) {
-        return prev.map(item => item.product.id === product.id ? { ...item, quantity: Number(item.quantity) + 1 } : item);
+        return prev.map(item => item.product.id === prod.id ? { ...item, quantity: Number(item.quantity) + 1 } : item);
       }
-      return [...prev, { product, quantity: 1, finalPrice: Number(product.price) || 0 }];
+      return [...prev, { product: prod, quantity: 1, finalPrice: Number(prod.price) || 0 }];
     });
+    setSearchTerm("");
+    searchInputRef.current?.focus();
   };
 
   const updateCartItem = (productId: number, field: 'quantity' | 'finalPrice', value: string) => {
@@ -283,7 +319,7 @@ export function Sells() {
   };
 
   return (
-    <motion.div className="absolute inset-0 flex flex-col p-2 sm:p-4 lg:p-5 gap-3 text-on-bg z-20 bg-gray-50/50" initial={{ x: "100%" }} animate={{ x: "0%" }} exit={{x: "100%" }} transition={{ duration: 0.28 }}>
+    <motion.div onContextMenu={(e) => e.preventDefault()} className="absolute inset-0 flex flex-col p-2 sm:p-4 lg:p-5 gap-3 text-on-bg z-20 bg-gray-50/50" initial={{ x: "100%" }} animate={{ x: "0%" }} exit={{x: "100%" }} transition={{ duration: 0.28 }}>
       
       <header className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-4 py-3 shadow-sm shrink-0 flex-wrap gap-2">
         <div className="flex items-center gap-3">
@@ -300,7 +336,14 @@ export function Sells() {
         
         <div className="flex flex-col flex-1 min-w-[120px] gap-2 lg:gap-3 min-h-0">
             <div className="flex flex-col xl:flex-row items-center gap-2 rounded-xl bg-white border border-gray-200 p-2 shadow-sm shrink-0">
-                <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyDown={handleSearchKeyDown} placeholder="🔍 Buscar..." className="w-full rounded-lg bg-gray-50 px-3 py-2 text-sm outline-none border border-gray-200 focus:border-primary transition-colors" />
+                <div className="w-full relative">
+                    <input ref={searchInputRef} type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyDown={handleSearchKeyDown} placeholder="🔍 Buscar..." className="w-full rounded-lg bg-gray-50 px-3 py-2 text-sm outline-none border border-gray-200 focus:border-primary transition-colors" />
+                    {searchTerm && (
+                        <div className="absolute top-full left-1 mt-1 text-[9px] font-bold text-gray-500 bg-white border border-gray-100 px-2 py-0.5 rounded shadow-sm z-10">
+                            Encontrados: <span className="text-primary">{regularProducts.length}</span> registrados, <span className="text-primary">{bulkProducts.length}</span> a granel
+                        </div>
+                    )}
+                </div>
                 
                 <div className="relative w-full xl:w-1/3" ref={categoryDropdownRef}>
                   <button
@@ -351,8 +394,8 @@ export function Sells() {
             </div>
             
             <div className="flex flex-col sm:flex-row bg-gray-200 rounded-xl p-1 shrink-0 gap-1 sm:gap-0">
-                <button onClick={() => setActiveTab('regular')} className={`flex-1 py-1.5 lg:py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors cursor-pointer ${activeTab === 'regular' ? 'bg-white shadow-sm text-primary' : 'text-gray-500'}`}>Registrados</button>
-                <button onClick={() => setActiveTab('bulk')} className={`flex-1 py-1.5 lg:py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors cursor-pointer ${activeTab === 'bulk' ? 'bg-white shadow-sm text-primary' : 'text-gray-500'}`}>Productos sin Clave</button>
+                <button onClick={() => setActiveTab('regular')} className={`flex-1 py-1.5 lg:py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors cursor-pointer ${activeTab === 'regular' ? 'bg-white shadow-sm text-primary' : 'text-gray-500'}`}>Registrados ({regularProducts.length})</button>
+                <button onClick={() => setActiveTab('bulk')} className={`flex-1 py-1.5 lg:py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors cursor-pointer ${activeTab === 'bulk' ? 'bg-white shadow-sm text-primary' : 'text-gray-500'}`}>A Granel ({bulkProducts.length})</button>
             </div>
 
             <section className="flex-col flex-1 rounded-2xl bg-gray-100/50 border border-gray-200 p-2 lg:p-3 overflow-hidden flex">
@@ -371,7 +414,7 @@ export function Sells() {
                                     code={prod.barcode?.toString() || "S/N"} 
                                     isSelected={false} 
                                     originalPrice={originalPrice ? Number(originalPrice) : undefined} 
-                                    onClick={() => addToCart(prod)} 
+                                    onClick={() => handleProductSelect(prod)} 
                                   />
                                 )
                             })}
@@ -392,7 +435,7 @@ export function Sells() {
                                     photo={prod.photo} 
                                     isSelected={false} 
                                     originalPrice={originalPrice ? Number(originalPrice) : undefined} 
-                                    onClick={() => addToCart(prod)} 
+                                    onClick={() => handleProductSelect(prod)} 
                                   />
                                 )
                             })}
@@ -403,7 +446,7 @@ export function Sells() {
             </section>
         </div>
 
-        <div className="flex flex-col w-[200px] sm:w-[280px] lg:w-[400px] shrink-0 rounded-2xl bg-white border border-gray-200 shadow-sm min-h-0 overflow-hidden">
+        <div className="flex flex-col w-[220px] sm:w-[300px] lg:w-[475px] shrink-0 rounded-2xl bg-white border border-gray-200 shadow-sm min-h-0 overflow-hidden">
           <div className="bg-gray-50 p-2 lg:p-4 border-b border-gray-200 flex justify-between items-center shrink-0">
             <div className="flex items-center gap-2">
               <h2 className="text-sm lg:text-lg font-bold text-gray-900 truncate">Lista de Compras</h2>
@@ -420,7 +463,7 @@ export function Sells() {
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto p-2 lg:p-3 space-y-2 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-2 space-y-1.5 custom-scrollbar">
             {cart.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center opacity-40">
                     <span className="text-4xl lg:text-5xl mb-2">🛒</span>
@@ -433,42 +476,43 @@ export function Sells() {
                       const isExceeded = (Number(item.quantity) || 0) > (Number(item.product.stock) || 0);
 
                       return (
-                      <div key={item.product.id} className={`flex items-center gap-2 p-2 rounded-xl border bg-gray-50/50 relative group transition-colors ${isExceeded ? 'border-orange-500 ring-1 ring-orange-500/50 shadow-sm' : 'border-gray-200'}`}>
+                      <div key={item.product.id} className={`flex items-center gap-1.5 p-1.5 rounded-lg border bg-gray-50/50 relative group transition-colors ${isExceeded ? 'border-orange-500 ring-1 ring-orange-500/50 shadow-sm' : 'border-gray-200'}`}>
                           
                           {/* Información del producto */}
                           <div className="flex-1 min-w-0 flex flex-col justify-center">
-                              <p className="font-bold text-[10px] lg:text-xs text-gray-900 leading-tight truncate">{item.product.name}</p>
-                              <p className="text-[9px] font-bold text-gray-400">
-                                  ${(Number(item.product.price) || 0).toFixed(2)} {isPieza ? 'PZA' : 'KG'}
-                              </p>
+                              <p className="font-bold text-[14px] text-gray-900 leading-tight truncate my-1">{item.product.name}</p>
+                              <div className="flex items-center gap-1">
+                                  <span className="text-[10px] bg-gray-200 text-gray-600 px-1 py-0.5 rounded uppercase font-bold tracking-wider leading-none">{isPieza ? 'PZA' : 'KG'}</span>
+                                  <span className="text-[11px] font-bold text-gray-400">${(Number(item.product.price) || 0).toFixed(2)}</span>
+                              </div>
                           </div>
                           
                           {/* Entradas de cantidad y precio */}
-                          <div className="flex items-center gap-1 shrink-0">
+                          <div className="flex items-center gap-0.5 shrink-0">
                               <input 
-                                  type="number" min={isPieza ? "1" : "0"} step={isPieza ? "1" : "0.001"} 
+                                  type="number" min={isPieza ? "1" : "0"} step={isPieza ? "1" : "0.005"} 
                                   value={item.quantity ?? ""} onChange={e => updateCartItem(item.product.id, 'quantity', e.target.value)} 
-                                  className="w-12 lg:w-14 rounded-md border border-gray-300 px-1 py-1 text-[10px] lg:text-xs font-bold text-center outline-none focus:border-primary" 
+                                  className="w-10 lg:w-14 rounded border border-gray-300 px-1 py-0.5 text-[12px] font-bold text-center outline-none focus:border-primary bg-white" 
                                   title="Cantidad"
                               />
-                              <span className="text-gray-300 font-bold text-[10px] lg:text-xs">x</span>
+                              <span className="text-gray-300 font-bold text-[12px] px-0.5">x</span>
                               <input 
                                   type="number" min="0" step="0.01" 
                                   value={item.finalPrice ?? ""} onChange={e => updateCartItem(item.product.id, 'finalPrice', e.target.value)} 
                                   disabled={!isAdmin} 
-                                  className="w-14 lg:w-16 rounded-md border border-gray-300 px-1 py-1 text-[10px] lg:text-xs font-bold text-center outline-none focus:border-primary disabled:bg-gray-100 disabled:text-gray-500 disabled:border-transparent" 
+                                  className="w-12 lg:w-12 rounded border border-gray-300 px-1 py-0.5 text-[12px] font-bold text-center outline-none focus:border-primary disabled:bg-gray-100 disabled:text-gray-500 disabled:border-transparent bg-white" 
                                   title="Precio Unitario"
                               />
                           </div>
 
                           {/* Total y botón de eliminar */}
-                          <div className="flex items-center gap-2 shrink-0 w-16 lg:w-20 justify-end">
-                              <span className="font-extrabold text-primary text-[10px] lg:text-xs truncate">
+                          <div className="flex items-center gap-1 shrink-0 w-14 lg:w-20 justify-end">
+                              <span className="font-extrabold text-primary text-[14px] lg:text-sm truncate">
                                   ${((Number(item.quantity) || 0) * (Number(item.finalPrice) || 0)).toFixed(2)}
                               </span>
                               <button 
                                 onClick={() => removeFromCart(item.product.id)} 
-                                className="w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-full bg-red-100 text-red-500 hover:bg-red-500 hover:text-white transition-colors cursor-pointer text-[10px]"
+                                className="w-4 h-4 flex-shrink-0 flex items-center justify-center rounded-full bg-red-100 text-red-500 hover:bg-red-500 hover:text-white transition-colors cursor-pointer text-[8px]"
                               >
                                 ✕
                               </button>
@@ -482,45 +526,45 @@ export function Sells() {
           </div>
 
           {/* SECCIÓN DE REGISTRO RÁPIDO */}
-          <div className="px-2 lg:px-4 py-2 shrink-0">
+          <div className="px-2 lg:px-4 py-2 shrink-0 border-t border-gray-100">
             {!isQuickAddOpen ? (
                 <button 
                     onClick={() => setIsQuickAddOpen(true)} 
-                    className="w-full py-2 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 text-xs font-bold hover:border-primary hover:text-primary hover:bg-primary/5 transition-all cursor-pointer"
+                    className="w-full py-1.5 border border-dashed border-gray-300 rounded-lg text-gray-500 text-[10px] font-bold hover:border-primary hover:text-primary hover:bg-primary/5 transition-all cursor-pointer"
                 >
                     + Agregar Producto Rápido
                 </button>
             ) : (
-                <div className="bg-gray-100/80 p-2 rounded-xl border border-gray-200 flex flex-col gap-2 shadow-inner">
+                <div className="bg-gray-100/80 p-2 rounded-xl border border-gray-200 flex flex-col gap-1.5 shadow-inner">
                     <input 
                         type="text" autoFocus placeholder="Nombre del producto *" 
                         value={quickProduct.name} onChange={e => setQuickProduct({...quickProduct, name: e.target.value})} 
-                        className="w-full text-xs font-bold p-2 rounded-lg border border-gray-300 outline-none focus:border-primary bg-white" 
+                        className="w-full text-xs font-bold p-1.5 rounded-lg border border-gray-300 outline-none focus:border-primary bg-white" 
                     />
-                    <div className="flex gap-2">
+                    <div className="flex gap-1.5">
                         <select 
                             value={quickProduct.sellformat} onChange={e => setQuickProduct({...quickProduct, sellformat: e.target.value})} 
-                            className="flex-1 text-xs font-bold p-2 rounded-lg border border-gray-300 outline-none bg-white"
+                            className="flex-1 text-xs font-bold p-1.5 rounded-lg border border-gray-300 outline-none bg-white"
                         >
-                            <option value="Pieza">Pieza</option>
-                            <option value="Peso">Peso (KG)</option>
+                            <option value="Pieza">PZ</option>
+                            <option value="Peso">KG</option>
                         </select>
                         <input 
-                            type="text" placeholder="Cód. Barras (Opcional)" 
+                            type="text" placeholder="Cód. Barras (Opc)" 
                             value={quickProduct.barcode} onChange={e => setQuickProduct({...quickProduct, barcode: e.target.value})} 
-                            className="flex-[1.5] text-xs font-bold p-2 rounded-lg border border-gray-300 outline-none focus:border-primary bg-white" 
+                            className="flex-[1.5] text-xs font-bold p-1.5 rounded-lg border border-gray-300 outline-none focus:border-primary bg-white" 
                         />
                     </div>
-                    <div className="flex gap-2 items-center">
+                    <div className="flex gap-1.5 items-center">
                         <input 
-                            type="number" min="0" step="0.01" placeholder="Precio Final (Kg/Pz) $*" 
+                            type="number" min="0" step="0.01" placeholder="Precio Final $*" 
                             value={quickProduct.price} onChange={e => setQuickProduct({...quickProduct, price: e.target.value})} 
-                            className="flex-1 text-xs font-extrabold p-2 rounded-lg border border-gray-300 outline-none focus:border-primary bg-white" 
+                            className="flex-1 text-xs font-extrabold p-1.5 rounded-lg border border-gray-300 outline-none focus:border-primary bg-white" 
                         />
-                        <button onClick={handleQuickAdd} className="bg-primary text-white px-4 py-2 rounded-lg text-xs font-bold hover:brightness-90 transition-all cursor-pointer shadow-sm">
+                        <button onClick={handleQuickAdd} className="bg-primary text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:brightness-90 transition-all cursor-pointer shadow-sm">
                             Añadir
                         </button>
-                        <button onClick={() => setIsQuickAddOpen(false)} className="bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-xs font-bold hover:bg-gray-50 transition-all cursor-pointer shadow-sm">
+                        <button onClick={() => setIsQuickAddOpen(false)} className="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-50 transition-all cursor-pointer shadow-sm">
                             ✕
                         </button>
                     </div>
@@ -582,7 +626,7 @@ export function Sells() {
                   )}
 
                   {!isCash && (
-                      <p className="text-[10px] font-bold text-blue-500 mt-1.5 bg-blue-50 py-1 rounded-md border border-blue-100">Incluye comisión bancaria del 4%</p>
+                      <p className="text-[10px] font-bold text-blue-500 mt-1.5 bg-blue-50 py-1 rounded-md border border-blue-100">¡Paga con tu tarjeta preferida sin comisión!</p>
                   )}
               </motion.div>
 

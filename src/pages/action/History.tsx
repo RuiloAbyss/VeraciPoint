@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLoading } from "../../components/LoadingContext";
 import { fetchSalesHistory, fetchSaleDetails, type Sale, type SaleDetail } from "../../services/sellsService";
-import { getEmployees } from "../../services/employeeService"; // Importado igual que en Staff.tsx
+import { getEmployees } from "../../services/employeeService"; 
 import { Analytics } from "./Analytics"; 
 
 const getLocalToday = () => {
@@ -21,7 +21,6 @@ export function History() {
   const [activeEmployees, setActiveEmployees] = useState<string[]>(["Todos"]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   
-  // Filtros estrictos sin barra de búsqueda
   const [paymentFilter, setPaymentFilter] = useState("Todos");
   const [dateFilter, setDateFilter] = useState(getLocalToday()); 
   const [employeeFilter, setEmployeeFilter] = useState("Todos");
@@ -45,10 +44,8 @@ export function History() {
         const salesData = await fetchSalesHistory();
         setSales(Array.isArray(salesData) ? salesData : []);
 
-        // Reutilizamos la misma función estructurada que usa Staff.tsx
         const empsData = await getEmployees();
         
-        // Filtrado riguroso de activos evaluando el estado del objeto
         const active = (Array.isArray(empsData) ? empsData : [])
           .filter((e: any) => e.status === true || e.status === 1 || String(e.status) === "true")
           .map((e: any) => `${e.name} ${e.lastname}`);
@@ -122,7 +119,7 @@ export function History() {
   };
 
   return (
-    <motion.div className="absolute inset-0 flex flex-col p-2 sm:p-4 lg:p-5 gap-3 text-gray-900 z-20 bg-gray-50/50" initial={{ x: "100%" }} animate={{ x: "0%" }} exit={{ x: "100%" }} transition={{ duration: 0.28 }}>
+    <motion.div onContextMenu={(e) => e.preventDefault()} className="absolute inset-0 flex flex-col p-2 sm:p-4 lg:p-5 gap-3 text-gray-900 z-20 bg-gray-50/50" initial={{ x: "100%" }} animate={{ x: "0%" }} exit={{ x: "100%" }} transition={{ duration: 0.28 }}>
       
       <header className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-4 py-3 shadow-sm shrink-0 flex-wrap gap-4">
         <div className="flex items-center gap-3">
@@ -178,20 +175,20 @@ export function History() {
               <div className="col-span-full p-4 text-center font-bold text-gray-500">No se encontraron ventas con estos filtros.</div>
             ) : (
               paginatedSales.map((sale) => (
-                <button key={sale.id} onClick={() => handleOpenDetails(sale)} className="group flex flex-col gap-2 rounded-xl bg-white p-3 text-left cursor-pointer overflow-hidden border border-gray-200 hover:border-primary/50 shadow-sm hover:shadow-md transition-all">
+                <button key={sale.id} onClick={() => handleOpenDetails(sale)} className="group flex flex-col justify-between gap-2 rounded-xl bg-white p-3 text-left cursor-pointer overflow-hidden border border-gray-200 hover:border-primary/50 shadow-sm hover:shadow-md transition-all shrink-0 min-h-[90px]">
                   <div className="flex justify-between items-start border-b border-gray-100 pb-2">
                     <div className="flex flex-col">
                       <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest">TICKET #{sale.id}</span>
                       <span className="font-bold text-sm text-gray-900">{sale.date}</span>
                     </div>
-                    <span className="text-xl bg-gray-50 p-1.5 rounded-lg">{sale.cash ? "💵" : "💳"}</span>
+                    <span className="text-xl bg-gray-50 p-1.5 rounded-lg leading-none">{sale.cash ? "💵" : "💳"}</span>
                   </div>
-                  <div className="flex justify-between items-end pt-1">
+                  <div className="flex justify-between items-end">
                     <div className="flex flex-col">
                       <span className="text-[10px] text-gray-500 font-bold uppercase">Cajero:</span>
                       <span className="text-xs font-semibold text-gray-700 truncate max-w-[120px]">{sale.employeeName}</span>
                     </div>
-                    <span className={`font-extrabold text-lg ${Number(sale.total) < 0 ? 'text-red-600' : 'text-primary'}`}>
+                    <span className={`font-extrabold text-lg leading-none ${Number(sale.total) < 0 ? 'text-red-600' : 'text-primary'}`}>
                       ${Number(sale.total).toFixed(2)}
                     </span>
                   </div>

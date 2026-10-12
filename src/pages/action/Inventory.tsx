@@ -38,7 +38,7 @@ export function Inventory() {
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null); 
 
-  // CORRECCIÓN: Limpieza del timeout al desmontar para evitar colapsos de navegación
+  // Limpieza del timeout
   useEffect(() => {
     const timeout = setTimeout(() => {
       if (modalState === 'none') {
@@ -48,9 +48,25 @@ export function Inventory() {
         if (modalInput) modalInput.focus();
       }
     }, 150);
-
     return () => clearTimeout(timeout);
   }, [modalState]);
+
+  // Auto-focus inteligente al empezar a teclear
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (modalState !== 'none' || isDeleteModalOpen || errorModal.isOpen) return;
+      
+      const target = e.target as HTMLElement;
+      const tag = target.tagName.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [modalState, isDeleteModalOpen, errorModal.isOpen]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -148,7 +164,7 @@ export function Inventory() {
     return result;
   }, [safeProducts, searchTerm, categoryFilter, stockFilter, sortOrder]);
 
-  const regularProducts = filteredProducts;
+  const regularProducts = filteredProducts.filter(p => p.barcode !== null && p.barcode !== undefined);
   const bulkProducts = filteredProducts.filter(p => p.barcode === null || p.barcode === undefined);
   
   const rawSelectedProduct = safeProducts.find(p => p.id === selectedId) || null;
@@ -324,7 +340,7 @@ export function Inventory() {
   };
 
   return (
-    <motion.div className="absolute inset-0 flex flex-col p-2 sm:p-4 lg:p-5 gap-3 text-on-bg z-20 bg-gray-50/50" initial={{ x: "100%" }} animate={{ x: "0%" }} exit={{x: "100%" }} transition={{ duration: 0.28 }}>
+    <motion.div onContextMenu={(e) => e.preventDefault()} className="absolute inset-0 flex flex-col p-2 sm:p-4 lg:p-5 gap-3 text-on-bg z-20 bg-gray-50/50" initial={{ x: "100%" }} animate={{ x: "0%" }} exit={{x: "100%" }} transition={{ duration: 0.28 }}>
       
       <header className="flex items-center justify-between rounded-xl bg-white border border-gray-200 px-4 py-3 shadow-sm shrink-0 flex-wrap gap-2">
         <div className="flex items-center gap-3">
@@ -364,6 +380,11 @@ export function Inventory() {
             placeholder="🔍 Buscar nombre o código..." 
             className="w-full rounded-lg bg-gray-50 px-4 py-2 pr-10 text-sm outline-none border border-gray-200 focus:border-primary" 
           />
+          {searchTerm && (
+            <div className="absolute top-full left-1 mt-1 text-[9px] font-bold text-gray-500 bg-white border border-gray-100 px-2 py-0.5 rounded shadow-sm z-10">
+                Encontrados: <span className="text-primary">{regularProducts.length}</span> registrados, <span className="text-primary">{bulkProducts.length}</span> a granel
+            </div>
+          )}
           {searchTerm && (
             <button 
               type="button" 
@@ -529,7 +550,6 @@ export function Inventory() {
       </AnimatePresence>
 
       <AnimatePresence mode="wait">
-        {/* CORRECCIÓN: Agregar explícitamente "key" a cada renderizado condicional para evitar que Framer Motion crashee en PopChildMeasure */}
         {(modalState === 'edit' || modalState === 'create' || modalState === 'clone') && (
           <ProductFormModal 
             key="modal-form"
@@ -557,7 +577,6 @@ export function Inventory() {
       </AnimatePresence>
 
       <AnimatePresence mode="wait">
-        {/* CORRECCIÓN: El contenedor padre condicional debe ser <motion.div> en vez de <div> ordinario */}
         {errorModal.isOpen && (
           <motion.div key="modal-error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg flex flex-col gap-4 border border-gray-100">

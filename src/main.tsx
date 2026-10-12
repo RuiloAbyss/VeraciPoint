@@ -4,6 +4,8 @@ import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary"; 
 import { LoadingProvider } from "./components/LoadingContext";
 
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary>
