@@ -168,7 +168,7 @@ export function Sells() {
     return result.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   }, [safeProducts, searchTerm, categoryFilter]);
 
-  const regularProducts = filteredProducts.filter(p => p.barcode !== null && p.barcode !== undefined);
+  const regularProducts = filteredProducts.filter(p => p.barcode !== undefined);
   const bulkProducts = filteredProducts.filter(p => p.barcode === null || p.barcode === undefined);
 
   const targetList = activeTab === 'regular' ? regularProducts : bulkProducts;
