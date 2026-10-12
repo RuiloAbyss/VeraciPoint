@@ -22,7 +22,7 @@ export function BulkProductCard({ name, category, pricePerKg, sellformat, stock,
   
   // Lógica para detectar si es pieza o kilo
   const isPieza = sellformat?.toLowerCase() === "pieza";
-  const unitLabel = isPieza ? "pza" : "kg";
+  const unitLabelPrice = isPieza ? "pza" : "kg";
   const stockFormat = isPieza ? stock.toFixed(0) : stock.toFixed(3);
 
   // Estética con inyección naranja solo para ofertas
@@ -43,11 +43,11 @@ export function BulkProductCard({ name, category, pricePerKg, sellformat, stock,
       </p>
       <div className="flex flex-col items-center mt-1">
         {isOffer && originalPrice !== undefined && (
-            <span className="text-[10px] text-gray-400 line-through">${originalPrice.toFixed(2)}/{unitLabel}</span>
+            <span className="text-[10px] text-gray-400 line-through">${originalPrice.toFixed(2)}/{unitLabelPrice}</span>
         )}
-        <p className={`font-bold text-sm ${isOffer ? "text-orange-600" : "text-primary"}`}>${pricePerKg.toFixed(2)}/{unitLabel}</p>
-        <p className={`font-bold text-[10px] uppercase tracking-wide ${stockColor}`}>
-          {isPieza ? `${stockFormat} Pzas.` : `Aprox. ${stockFormat} Kg.`}
+        <p className={`font-bold text-sm ${isOffer ? "text-orange-600" : "text-primary"}`}>${pricePerKg.toFixed(2)}/{unitLabelPrice}</p>
+        <p className={`font-bold text-[10px] tracking-wide ${stockColor}`}>
+          Stock: {stockFormat} {isPieza ? "Pzas." : "Kg."}
         </p>
       </div>
     </button>

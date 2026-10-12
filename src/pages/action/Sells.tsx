@@ -33,10 +33,16 @@ export function Sells() {
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const cartEndRef = useRef<HTMLDivElement>(null);
+  const weightInputRef = useRef<HTMLInputElement>(null);
 
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [quickProduct, setQuickProduct] = useState({ name: '', sellformat: 'Pieza', barcode: '', price: '' });
 
+  // Estado para el modal de peso / báscula
+  const [weightModalProduct, setWeightModalProduct] = useState<Product | null>(null);
+  const [weightInputValue, setWeightInputValue] = useState<string>("0");
+
+  // Estados del Modal de Checkout
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [isCash, setIsCash] = useState(true);
   const [amountReceived, setAmountReceived] = useState<string>("");
@@ -59,7 +65,7 @@ export function Sells() {
   // Auto-focus inteligente al empezar a teclear
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if (isCheckoutModalOpen || isClearCartModalOpen || isQuickAddOpen || errorModal.isOpen) return;
+      if (isCheckoutModalOpen || isClearCartModalOpen || isQuickAddOpen || errorModal.isOpen || weightModalProduct) return;
       
       const target = e.target as HTMLElement;
       const tag = target.tagName.toLowerCase();
@@ -71,7 +77,17 @@ export function Sells() {
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [isCheckoutModalOpen, isClearCartModalOpen, isQuickAddOpen, errorModal.isOpen]);
+  }, [isCheckoutModalOpen, isClearCartModalOpen, isQuickAddOpen, errorModal.isOpen, weightModalProduct]);
+
+  // Auto-focus y selección automática en el modal de peso
+  useEffect(() => {
+    if (weightModalProduct) {
+      setTimeout(() => {
+        weightInputRef.current?.focus();
+        weightInputRef.current?.select();
+      }, 60);
+    }
+  }, [weightModalProduct]);
 
   useEffect(() => {
     if (cartEndRef.current) {
@@ -168,6 +184,14 @@ export function Sells() {
       : Math.floor(exactTotalWithFee);
   const isRounded = Math.abs(exactTotalWithFee - finalRoundedTotal) > 0.001;
 
+  // Verificación estricta de productos vendidos por peso / a granel
+  const isWeightProduct = (prod: Product) => {
+    const sf = (prod.sellformat || '').toLowerCase();
+    if (sf.includes('pieza') || sf.includes('pza') || sf.includes('unidad') || sf.includes('uni')) return false;
+    if (sf.includes('peso') || sf.includes('kg') || sf.includes('kilo') || sf.includes('granel')) return true;
+    return sf !== 'pieza';
+  };
+
   const handleQuickAdd = () => {
     if (!quickProduct.name || !quickProduct.price) {
       showToast("Nombre y precio son obligatorios", "error");
@@ -206,6 +230,13 @@ export function Sells() {
   };
 
   const handleProductSelect = (prod: Product) => {
+    if (isWeightProduct(prod)) {
+      setWeightModalProduct(prod);
+      setWeightInputValue("0");
+      setSearchTerm("");
+      return;
+    }
+
     setCart(prev => {
       const existing = prev.find(item => item.product.id === prod.id);
       if (existing) {
@@ -215,6 +246,50 @@ export function Sells() {
     });
     setSearchTerm("");
     searchInputRef.current?.focus();
+  };
+
+  // Confirmación del peso ingresado en el modal
+  const handleConfirmWeight = (overrideQty?: number) => {
+    if (!weightModalProduct) return;
+    const qty = overrideQty !== undefined ? overrideQty : parseFloat(weightInputValue);
+
+    if (isNaN(qty) || qty <= 0) {
+      showToast("Ingresa un peso válido mayor a 0", "error");
+      return;
+    }
+
+    const roundedQty = Number(qty.toFixed(3));
+
+    setCart(prev => {
+      const existing = prev.find(item => item.product.id === weightModalProduct.id);
+      if (existing) {
+        return prev.map(item =>
+          item.product.id === weightModalProduct.id
+            ? { ...item, quantity: Number((Number(item.quantity) + roundedQty).toFixed(3)) }
+            : item
+        );
+      }
+      return [...prev, { product: weightModalProduct, quantity: roundedQty, finalPrice: Number(weightModalProduct.price) || 0 }];
+    });
+
+    setWeightModalProduct(null);
+    setSearchTerm("");
+    searchInputRef.current?.focus();
+  };
+
+  const handleWeightInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let val = e.target.value.replace(/[^0-9.]/g, '');
+    const parts = val.split('.');
+    if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('');
+    
+    // Si empieza con 0 y sigue un dígito no decimal, elimina el cero inicial automáticamente
+    if (val.length > 1 && val.startsWith('0') && !val.startsWith('0.')) {
+      val = val.replace(/^0+/, '') || '0';
+    }
+    if (val === '.') {
+      val = '0.';
+    }
+    setWeightInputValue(val);
   };
 
   const updateCartItem = (productId: number, field: 'quantity' | 'finalPrice', value: string) => {
@@ -430,6 +505,7 @@ export function Sells() {
                                     name={prod.name || ""} 
                                     pricePerKg={Number(prod.price) || 0} 
                                     stock={Number(prod.stock) || 0} 
+                                    sellformat={prod.sellformat}
                                     minStock={prod.minStock} 
                                     status={prod.status} 
                                     photo={prod.photo} 
@@ -492,7 +568,7 @@ export function Sells() {
                               <input 
                                   type="number" min={isPieza ? "1" : "0"} step={isPieza ? "1" : "0.005"} 
                                   value={item.quantity ?? ""} onChange={e => updateCartItem(item.product.id, 'quantity', e.target.value)} 
-                                  className="w-10 lg:w-14 rounded border border-gray-300 px-1 py-0.5 text-[12px] font-bold text-center outline-none focus:border-primary bg-white" 
+                                  className="w-10 lg:w-16 rounded border border-gray-300 px-1 py-0.5 text-[12px] font-bold text-center outline-none focus:border-primary bg-white" 
                                   title="Cantidad"
                               />
                               <span className="text-gray-300 font-bold text-[12px] px-0.5">x</span>
@@ -585,6 +661,97 @@ export function Sells() {
         </div>
       </div>
 
+      {/* MODAL DE PESAJE / BÁSCULA */}
+      <AnimatePresence>
+        {weightModalProduct && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[65] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <motion.div 
+              layout 
+              initial={{ scale: 0.95, y: 20 }} 
+              animate={{ scale: 1, y: 0 }} 
+              exit={{ scale: 0.95, y: 20 }} 
+              className="bg-white rounded-3xl shadow-2xl border border-gray-200 p-6 sm:p-7 w-full max-w-sm flex flex-col overflow-hidden"
+            >
+              <div className="text-center mb-4">
+                <div className="w-12 h-12 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto mb-2 text-2xl shadow-inner">
+                  ⚖️
+                </div>
+                <h3 className="text-lg font-extrabold text-gray-900 leading-tight truncate px-2">{weightModalProduct.name}</h3>
+                <div className="flex justify-center items-center gap-2 mt-1">
+                  <span className="text-xs font-extrabold text-primary">${Number(weightModalProduct.price).toFixed(2)} / KG</span>
+                  <span className="text-[11px] font-bold text-gray-400">• Stock: {Number(weightModalProduct.stock).toFixed(3)} kg</span>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 flex flex-col items-center justify-center mb-4">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Peso a Ingresar (KG)</label>
+                <div className="flex items-center justify-center w-full">
+                  <input
+                    ref={weightInputRef}
+                    type="text"
+                    inputMode="decimal"
+                    value={weightInputValue}
+                    onChange={handleWeightInputChange}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleConfirmWeight();
+                      }
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setWeightModalProduct(null);
+                      }
+                      if (['-', '+', 'e', 'E'].includes(e.key)) {
+                        e.preventDefault();
+                      }
+                    }}
+                    onFocus={(e) => e.target.select()}
+                    placeholder="0"
+                    className="w-full text-center text-4xl font-extrabold text-primary outline-none bg-transparent placeholder:text-gray-300"
+                  />
+                </div>
+                <div className="mt-2 text-xs font-bold text-gray-500">
+                  Subtotal: <strong className="text-gray-900">${((parseFloat(weightInputValue) || 0) * Number(weightModalProduct.price || 0)).toFixed(2)}</strong>
+                </div>
+              </div>
+
+              {/* Botón para agregar todo el stock actual */}
+              <button
+                type="button"
+                onClick={() => {
+                  const currentStock = Number(weightModalProduct.stock) || 0;
+                  if (currentStock <= 0) {
+                    showToast("No hay stock disponible en este producto", "info");
+                    return;
+                  }
+                  handleConfirmWeight(currentStock);
+                }}
+                className="w-full py-2.5 mb-4 bg-orange-50 hover:bg-orange-100 text-orange-600 border border-orange-200 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
+              >
+                📦 Agregar todo el stock actual ({Number(weightModalProduct.stock).toFixed(3)} kg)
+              </button>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setWeightModalProduct(null)}
+                  className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl text-xs font-extrabold uppercase tracking-widest hover:bg-gray-200 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleConfirmWeight()}
+                  className="flex-1 py-3 text-white bg-primary hover:brightness-90 rounded-xl text-xs font-extrabold uppercase tracking-widest transition-all shadow-md cursor-pointer"
+                >
+                  Aceptar ↵
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* MODAL DE CONFIRMACIÓN DE PAGO (CHECKOUT) */}
       <AnimatePresence>
         {isCheckoutModalOpen && (
@@ -666,7 +833,7 @@ export function Sells() {
                                       layout
                                       initial={{ opacity: 0 }} 
                                       animate={{ opacity: 1 }} 
-                                      exit={{ opacity: 0 }}
+                                      exit={{ opacity: 0 }} 
                                       transition={{ duration: 0.2 }}
                                       className="w-full"
                                   >

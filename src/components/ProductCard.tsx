@@ -4,6 +4,7 @@ export interface ProductCardProps {
   category: string;
   code: string;
   price: number;
+  sellformat?: string;
   stock: number;
   minStock?: number | null;
   status?: number;
@@ -12,12 +13,17 @@ export interface ProductCardProps {
   onClick: () => void;
 }
 
-export function ProductCard({ name, category, code, price, stock, minStock, status, isSelected, originalPrice, onClick }: ProductCardProps) {
+export function ProductCard({ name, category, code, price, sellformat, stock, minStock, status, isSelected, originalPrice, onClick }: ProductCardProps) {
   const isOutOfStock = stock <= 0;
   const isLowStock = minStock !== null && minStock !== undefined && stock < minStock && stock > 0;
   const stockColor = isOutOfStock ? "text-red-600" : isLowStock ? "text-orange-500" : "text-gray-500";
   
   const isOffer = category === "Ofertas";
+
+  // Lógica para detectar si es pieza o kilo
+  const isPieza = sellformat?.toLowerCase() === "pieza";
+  const stockFormat = isPieza ? stock.toFixed(0) : stock.toFixed(3);
+  const unitLabel = isPieza ? "Pzas." : "Kg.";
 
   // Estética estrictamente original con inyección naranja solo para ofertas
   const cardClass = `group w-full flex items-center gap-3 rounded-xl p-2 text-left cursor-pointer overflow-hidden transition-all border ${status === 0 ? "opacity-60 grayscale" : ""} ${
@@ -43,7 +49,7 @@ export function ProductCard({ name, category, code, price, stock, minStock, stat
             <span className="text-[10px] text-gray-400 line-through">${originalPrice.toFixed(2)}</span>
         )}
         <span className={`font-bold text-sm ${isOffer ? "text-orange-600" : "text-primary"}`}>${price.toFixed(2)}</span>
-        <span className={`text-[11px] font-bold ${stockColor}`}>Stock: {stock} u.</span>
+        <span className={`text-[11px] font-bold ${stockColor}`}>Stock: {stockFormat} {unitLabel}</span>
       </div>
     </button>
   );
